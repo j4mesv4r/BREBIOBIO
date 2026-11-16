@@ -9,8 +9,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     // 1. Obtener sesión actual al cargar
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
@@ -23,6 +26,7 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
@@ -32,16 +36,19 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const fetchProfile = async (userId, reintentos = 3) => {
+  const fetchProfile = async (userId, reintentos = 5) => {
     try {
       const { data, error } = await supabase
         .from('perfiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle(); // Evita que lance error si el trigger aún está creando el perfil
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -49,11 +56,24 @@ export const AuthProvider = ({ children }) => {
         setProfile(data);
         setLoading(false);
       } else if (reintentos > 0) {
-        // Si es un usuario nuevo (ej. primer login con Google), esperamos 500ms a que el trigger termine
+        // Reintentar si el trigger de Supabase aún está creando el perfil de Google
         setTimeout(() => {
           fetchProfile(userId, reintentos - 1);
-        }, 500);
+        }, 600);
       } else {
+        // Si tras los reintentos no existe el perfil, intentamos crearlo manualmente al vuelo
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          const nuevoPerfil = {
+            id: currentUser.id,
+            email: currentUser.email,
+            nombre_completo: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Postulante Nuevo',
+            rol: 'usuario',
+            estado_validacion: 'pendiente'
+          };
+          await supabase.from('perfiles').upsert([nuevoPerfil]);
+          setProfile(nuevoPerfil);
+        }
         setLoading(false);
       }
     } catch (error) {
