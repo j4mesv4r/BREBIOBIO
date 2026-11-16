@@ -19,7 +19,7 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    // 2. Escuchar cambios de estado (login, logout)
+    // 2. Escuchar cambios de estado (login, logout, OAuth)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -35,22 +35,29 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (userId, reintentos = 3) => {
     try {
       const { data, error } = await supabase
         .from('perfiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Evita que lance error si el trigger aún está creando el perfil
 
       if (error) throw error;
 
       if (data) {
         setProfile(data);
+        setLoading(false);
+      } else if (reintentos > 0) {
+        // Si es un usuario nuevo (ej. primer login con Google), esperamos 500ms a que el trigger termine
+        setTimeout(() => {
+          fetchProfile(userId, reintentos - 1);
+        }, 500);
+      } else {
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error obteniendo perfil:', error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -62,7 +69,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, profile, setProfile, loading, signOut }}>
       {!loading && children}
     </AuthContext.Provider>
   );

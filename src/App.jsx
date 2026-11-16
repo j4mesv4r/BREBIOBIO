@@ -16,6 +16,7 @@ import PanelVoluntario from './pages/dashboard/PanelVoluntario';
 import CentralMando from './pages/dashboard/CentralMando';
 import Inventario from './pages/dashboard/Inventario';
 import GestionDirectorio from './pages/dashboard/GestionDirectorio';
+import MiPerfil from './pages/dashboard/MiPerfil'; // Asegúrate de importar MiPerfil
 
 const RutaProtegida = ({ children, rolesPermitidos }) => {
   const { user, profile, loading } = useAuth();
@@ -28,10 +29,22 @@ const RutaProtegida = ({ children, rolesPermitidos }) => {
     );
   }
 
+  // 1. Si no está logueado, a Login
   if (!user) return <Navigate to="/login" replace />;
 
-  if (rolesPermitidos && !rolesPermitidos.includes(profile?.rol)) {
-    return <Navigate to="/" replace />;
+  // 2. Lógica de validación dual (Rol de Sistema + Cargo en ONG)
+  if (rolesPermitidos) {
+    const rolSistema = profile?.rol?.toLowerCase() || '';
+    const cargoOng = profile?.cargo_ong?.toLowerCase() || '';
+
+    // Verifica si el array rolesPermitidos incluye su rol de sistema (ej: superadmin) 
+    // o su cargo en la ONG (ej: postulante, voluntario, director)
+    const tieneAcceso = rolesPermitidos.includes(rolSistema) || rolesPermitidos.includes(cargoOng);
+
+    if (!tieneAcceso) {
+      // Si no tiene acceso, lo mandamos a su perfil básico para que no quede en pantalla en blanco
+      return <Navigate to="/mi-perfil" replace />;
+    }
   }
 
   return children;
@@ -51,46 +64,11 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           {/* Portal Público */}
-          <Route
-            path="/"
-            element={
-              <PublicLayout>
-                <Home />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/nosotros"
-            element={
-              <PublicLayout>
-                <SobreNosotros />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/apoyo"
-            element={
-              <PublicLayout>
-                <SolicitarApoyo />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/postular"
-            element={
-              <PublicLayout>
-                <Postular />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/voluntario/:rut"
-            element={
-              <PublicLayout>
-                <FichaVoluntarioPublica />
-              </PublicLayout>
-            }
-          />
+          <Route path="/" element={<PublicLayout><Home /></PublicLayout>} />
+          <Route path="/nosotros" element={<PublicLayout><SobreNosotros /></PublicLayout>} />
+          <Route path="/apoyo" element={<PublicLayout><SolicitarApoyo /></PublicLayout>} />
+          <Route path="/postular" element={<PublicLayout><Postular /></PublicLayout>} />
+          <Route path="/voluntario/:rut" element={<PublicLayout><FichaVoluntarioPublica /></PublicLayout>} />
 
           {/* Autenticación */}
           <Route path="/login" element={<Login />} />
@@ -100,14 +78,15 @@ export default function App() {
           <Route
             path="/mi-perfil"
             element={
-              <RutaProtegida
-                rolesPermitidos={[
-                  'postulante',
-                  'voluntario',
-                  'director',
-                  'superadmin',
-                ]}
-              >
+              <RutaProtegida>
+                <MiPerfil />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/panel"
+            element={
+              <RutaProtegida rolesPermitidos={['postulante', 'voluntario', 'director', 'superadmin']}>
                 <PanelVoluntario />
               </RutaProtegida>
             }
