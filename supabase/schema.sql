@@ -18,8 +18,21 @@ create policy "Usuarios autenticados pueden ver su propio perfil"
   on public.perfiles for select
   using (auth.uid() = id);
 
+create policy "Lectura pública de perfiles activos para ficha"
+  on public.perfiles for select
+  using (activo = true);
+
 create policy "Directores y superadmin pueden ver todos los perfiles"
   on public.perfiles for select
+  using (
+    exists (
+      select 1 from public.perfiles p
+      where p.id = auth.uid() and p.rol in ('director', 'superadmin')
+    )
+  );
+
+create policy "Directores y superadmin pueden actualizar roles de perfiles"
+  on public.perfiles for update
   using (
     exists (
       select 1 from public.perfiles p
@@ -153,6 +166,15 @@ create policy "Cualquiera puede enviar una solicitud de apoyo"
 
 create policy "Directores y superadmin pueden ver solicitudes"
   on public.solicitudes_apoyo for select
+  using (
+    exists (
+      select 1 from public.perfiles p
+      where p.id = auth.uid() and p.rol in ('director', 'superadmin')
+    )
+  );
+
+create policy "Directores y superadmin pueden actualizar solicitudes"
+  on public.solicitudes_apoyo for update
   using (
     exists (
       select 1 from public.perfiles p

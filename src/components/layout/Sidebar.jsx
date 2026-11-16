@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { User, MapPin, Package } from 'lucide-react';
+import { User, MapPin, Package, Shield } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Sidebar() {
@@ -15,6 +15,12 @@ export default function Sidebar() {
       to: '/central-mando',
       label: 'Central de Mando',
       icon: MapPin,
+      show: isDirectorOrAdmin,
+    },
+    {
+      to: '/gestion',
+      label: 'Gestión Directorio',
+      icon: Shield,
       show: isDirectorOrAdmin,
     },
     {

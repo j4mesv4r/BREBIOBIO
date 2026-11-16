@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
@@ -10,6 +11,8 @@ import {
   Clock,
   CheckCircle,
   X,
+  Package,
+  User,
 } from 'lucide-react';
 
 export default function CentralMando() {
@@ -161,7 +164,19 @@ export default function CentralMando() {
             Panel de Control de Operativos - BRE Biobío
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/inventario"
+            className="hidden items-center gap-1.5 rounded border border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-200 hover:bg-gray-800 sm:inline-flex"
+          >
+            <Package size={16} /> Inventario
+          </Link>
+          <Link
+            to="/mi-perfil"
+            className="hidden items-center gap-1.5 rounded border border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-200 hover:bg-gray-800 sm:inline-flex"
+          >
+            <User size={16} /> Mi Perfil
+          </Link>
           <span className="rounded-full border border-gray-700 bg-gray-800 px-3 py-1 text-sm font-semibold">
             Hola, {profile?.nombre_completo || 'Director'}
           </span>

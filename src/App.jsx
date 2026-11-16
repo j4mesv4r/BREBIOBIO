@@ -15,6 +15,7 @@ import RegistroPostulante from './pages/auth/RegistroPostulante';
 import PanelVoluntario from './pages/dashboard/PanelVoluntario';
 import CentralMando from './pages/dashboard/CentralMando';
 import Inventario from './pages/dashboard/Inventario';
+import GestionDirectorio from './pages/dashboard/GestionDirectorio';
 
 const RutaProtegida = ({ children, rolesPermitidos }) => {
   const { user, profile, loading } = useAuth();
@@ -124,6 +125,14 @@ export default function App() {
             element={
               <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
                 <Inventario />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/gestion"
+            element={
+              <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
+                <GestionDirectorio />
               </RutaProtegida>
             }
           />

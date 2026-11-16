@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   LogOut,
   Home,
+  MapPin,
+  Package,
 } from 'lucide-react';
 
 export default function PanelVoluntario() {
@@ -157,6 +159,24 @@ export default function PanelVoluntario() {
             <FileText size={20} />
             Mis Certificados
           </Link>
+          {(profile?.rol === 'director' || profile?.rol === 'superadmin') && (
+            <>
+              <Link
+                to="/central-mando"
+                className="flex items-center gap-3 rounded-lg p-3 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                <MapPin size={20} />
+                Central de Mando
+              </Link>
+              <Link
+                to="/inventario"
+                className="flex items-center gap-3 rounded-lg p-3 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                <Package size={20} />
+                Inventario
+              </Link>
+            </>
+          )}
           <Link
             to="/"
             className="flex items-center gap-3 rounded-lg p-3 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
