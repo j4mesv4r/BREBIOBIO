@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { User, MapPin, Package, Shield } from 'lucide-react';
+import { User, MapPin, Package, Shield, Settings } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Sidebar() {
@@ -8,6 +8,7 @@ export default function Sidebar() {
 
   const isDirectorOrAdmin =
     profile?.rol === 'director' || profile?.rol === 'superadmin';
+  const isSuperadmin = profile?.rol === 'superadmin';
 
   const links = [
     { to: '/mi-perfil', label: 'Panel Voluntario', icon: User, show: true },
@@ -28,6 +29,12 @@ export default function Sidebar() {
       label: 'Inventario',
       icon: Package,
       show: isDirectorOrAdmin,
+    },
+    {
+      to: '/configuracion',
+      label: 'Configuración Sitio',
+      icon: Settings,
+      show: isSuperadmin,
     },
   ];
 

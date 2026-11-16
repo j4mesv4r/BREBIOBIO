@@ -7,6 +7,8 @@ create table if not exists public.perfiles (
   nombre_completo text,
   rol text not null default 'postulante'
     check (rol in ('superadmin', 'director', 'voluntario', 'postulante')),
+  estado_validacion text not null default 'pendiente'
+    check (estado_validacion in ('pendiente', 'aprobado', 'rechazado')),
   telefono text,
   activo boolean not null default true,
   created_at timestamptz not null default now()
@@ -45,19 +47,24 @@ create policy "Directores y superadmin pueden actualizar roles de perfiles"
     )
   );
 
--- Trigger para crear el perfil automáticamente al registrarse en Supabase Auth
+-- Trigger para crear el perfil automáticamente al registrarse en Supabase Auth (correo o Google OAuth)
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.perfiles (id, nombre_completo, rut, rol)
+  insert into public.perfiles (id, nombre_completo, rut, rol, estado_validacion)
   values (
     new.id,
-    new.raw_user_meta_data ->> 'nombre_completo',
+    coalesce(
+      new.raw_user_meta_data ->> 'nombre_completo',
+      new.raw_user_meta_data ->> 'full_name',
+      new.raw_user_meta_data ->> 'name'
+    ),
     new.raw_user_meta_data ->> 'rut',
-    coalesce(new.raw_user_meta_data ->> 'rol', 'postulante')
+    coalesce(new.raw_user_meta_data ->> 'rol', 'postulante'),
+    'pendiente'
   );
   return new;
 end;
@@ -184,6 +191,40 @@ create policy "Directores y superadmin pueden actualizar solicitudes"
     exists (
       select 1 from public.perfiles p
       where p.id = auth.uid() and p.rol in ('director', 'superadmin')
+    )
+  );
+
+-- 6. Tabla de configuración institucional del sitio (Redes Sociales dinámicas)
+create table if not exists public.configuracion_sitio (
+  id integer primary key default 1 check (id = 1),
+  instagram_url text,
+  facebook_url text,
+  tiktok_url text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.configuracion_sitio (id, instagram_url, facebook_url, tiktok_url)
+values (1, null, null, null)
+on conflict (id) do nothing;
+
+alter table public.configuracion_sitio enable row level security;
+
+create policy "Lectura pública de configuración del sitio"
+  on public.configuracion_sitio for select
+  using (true);
+
+create policy "Solo superadmin puede modificar configuración del sitio"
+  on public.configuracion_sitio for all
+  using (
+    exists (
+      select 1 from public.perfiles p
+      where p.id = auth.uid() and p.rol = 'superadmin'
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.perfiles p
+      where p.id = auth.uid() and p.rol = 'superadmin'
     )
   );
 

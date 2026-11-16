@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import OrganigramaDirectorio from '../../components/institucional/OrganigramaDirectorio';
 import {
   Target,
   Eye,
@@ -108,27 +109,32 @@ export default function SobreNosotros() {
           </div>
 
           <div className="grid gap-7 md:grid-cols-3">
-            {organos.map((org) => {
+            {organos.map((org, idx) => {
               const Icon = org.icon;
               return (
-                <div
-                  key={org.codigo}
-                  className="rounded-lg border-2 border-neutral-950 bg-white p-7 shadow-[6px_6px_0px_0px_#0a0a0a]"
-                >
-                  <div className="mb-4 flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded border-b-4 border-red-600 bg-black text-amber-400">
-                      <Icon size={22} />
+                <div key={org.codigo} className="escena-3d">
+                  <div
+                    className={`${
+                      idx % 2 === 0
+                        ? 'tarjeta-3d'
+                        : 'tarjeta-3d tarjeta-3d-inversa'
+                    } sombra-volumetrica-clara h-full rounded-lg border-2 border-neutral-950 bg-white p-7 hover:border-red-600`}
+                  >
+                    <div className="mb-4 flex items-center justify-between">
+                      <div className="capa-z-10 flex h-11 w-11 items-center justify-center rounded border-b-4 border-red-600 bg-black text-amber-400">
+                        <Icon size={22} />
+                      </div>
+                      <span className="rounded border border-neutral-300 bg-neutral-100 px-2.5 py-1 text-xs font-black uppercase tracking-widest text-neutral-900">
+                        {org.codigo}
+                      </span>
                     </div>
-                    <span className="rounded border border-neutral-300 bg-neutral-100 px-2.5 py-1 text-xs font-black uppercase tracking-widest text-neutral-900">
-                      {org.codigo}
-                    </span>
+                    <h3 className="capa-z-10 mb-2 text-lg font-black uppercase text-black">
+                      {org.titulo}
+                    </h3>
+                    <p className="text-sm font-semibold leading-relaxed text-neutral-700">
+                      {org.desc}
+                    </p>
                   </div>
-                  <h3 className="mb-2 text-lg font-black uppercase text-black">
-                    {org.titulo}
-                  </h3>
-                  <p className="text-sm font-semibold leading-relaxed text-neutral-700">
-                    {org.desc}
-                  </p>
                 </div>
               );
             })}
@@ -158,6 +164,8 @@ export default function SobreNosotros() {
           </div>
         </div>
       </section>
+
+      <OrganigramaDirectorio />
     </div>
   );
 }

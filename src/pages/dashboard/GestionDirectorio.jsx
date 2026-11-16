@@ -15,11 +15,12 @@ export default function GestionDirectorio() {
   const [tab, setTab] = useState('certificados');
   const [certificados, setCertificados] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
+  const [miembros, setMiembros] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const cargarDatos = async () => {
     setLoading(true);
-    const [certsRes, solRes] = await Promise.all([
+    const [certsRes, solRes, perfRes] = await Promise.all([
       supabase
         .from('certificados')
         .select('*, perfiles(id, nombre_completo, rut, rol)')
@@ -28,10 +29,15 @@ export default function GestionDirectorio() {
         .from('solicitudes_apoyo')
         .select('*')
         .order('created_at', { ascending: false }),
+      supabase
+        .from('perfiles')
+        .select('*')
+        .order('created_at', { ascending: false }),
     ]);
 
     if (!certsRes.error && certsRes.data) setCertificados(certsRes.data);
     if (!solRes.error && solRes.data) setSolicitudes(solRes.data);
+    if (!perfRes.error && perfRes.data) setMiembros(perfRes.data);
     setLoading(false);
   };
 
@@ -52,6 +58,15 @@ export default function GestionDirectorio() {
     const { error } = await supabase
       .from('perfiles')
       .update({ rol: 'voluntario' })
+      .eq('id', perfilId);
+
+    if (!error) cargarDatos();
+  };
+
+  const validarMiembro = async (perfilId, estadoValidacion) => {
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ estado_validacion: estadoValidacion })
       .eq('id', perfilId);
 
     if (!error) cargarDatos();
@@ -103,6 +118,16 @@ export default function GestionDirectorio() {
               }`}
             >
               Solicitudes de Apoyo ({solicitudes.length})
+            </button>
+            <button
+              onClick={() => setTab('miembros')}
+              className={`border-b-2 px-4 py-2 text-sm font-bold transition-colors ${
+                tab === 'miembros'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Validación de Miembros ({miembros.filter((m) => m.estado_validacion === 'pendiente').length})
             </button>
           </div>
 
@@ -179,6 +204,51 @@ export default function GestionDirectorio() {
                           <UserCheck size={14} /> Ascender a Voluntario
                         </button>
                       )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : tab === 'miembros' ? (
+            <div className="space-y-4">
+              {miembros.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
+                  No hay miembros registrados.
+                </p>
+              ) : (
+                miembros.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex flex-col justify-between gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900">
+                          {m.nombre_completo || 'Sin nombre'}
+                        </h3>
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold uppercase text-gray-700">
+                          {m.estado_validacion || 'pendiente'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        RUT: {m.rut || 'No registrado'} · Rol:{' '}
+                        <strong className="capitalize">{m.rol}</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => validarMiembro(m.id, 'aprobado')}
+                        className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                      >
+                        <CheckCircle size={14} /> Aprobar Acceso
+                      </button>
+                      <button
+                        onClick={() => validarMiembro(m.id, 'rechazado')}
+                        className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                      >
+                        <XCircle size={14} /> Rechazar
+                      </button>
                     </div>
                   </div>
                 ))

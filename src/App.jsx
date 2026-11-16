@@ -16,6 +16,7 @@ import PanelVoluntario from './pages/dashboard/PanelVoluntario';
 import CentralMando from './pages/dashboard/CentralMando';
 import Inventario from './pages/dashboard/Inventario';
 import GestionDirectorio from './pages/dashboard/GestionDirectorio';
+import ConfiguracionSitio from './pages/dashboard/ConfiguracionSitio';
 import MiPerfil from './pages/dashboard/MiPerfil'; // Asegúrate de importar MiPerfil
 
 const RutaProtegida = ({ children, rolesPermitidos }) => {
@@ -112,6 +113,14 @@ export default function App() {
             element={
               <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
                 <GestionDirectorio />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/configuracion"
+            element={
+              <RutaProtegida rolesPermitidos={['superadmin']}>
+                <ConfiguracionSitio />
               </RutaProtegida>
             }
           />
