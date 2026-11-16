@@ -1,8 +1,8 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
+import { fotosTerreno } from '../../utils/galeriaAutomatica';
 import {
-  Shield,
   Compass,
+  Shield,
   HeartPulse,
   Mountain,
   Flame,
@@ -10,221 +10,235 @@ import {
   UserPlus,
   CheckCircle2,
   ArrowRight,
-  Radio,
-  Award,
   FileCheck2,
-  Users
+  Camera,
 } from 'lucide-react';
 
 export default function Home() {
+  // Imágenes de respaldo solo si aún no has puesto fotos en src/assets/terreno/
+  const respaldoFotos = [
+    'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&q=80&w=1400',
+    'https://images.unsplash.com/photo-1516574187841-cb9cc2ca948b?auto=format&fit=crop&q=80&w=1400',
+    'https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&q=80&w=1400',
+  ];
+
+  const fotoPrincipal = fotosTerreno[0] || respaldoFotos[0];
+  const galeriaMostrar =
+    fotosTerreno.length > 0 ? fotosTerreno : respaldoFotos;
+
   const especialidades = [
     {
       icon: Compass,
+      codigo: 'AREA-01',
       titulo: 'Búsqueda Especializada',
-      descripcion: 'Rastreo sistemático y georreferenciado de personas extraviadas en zonas agrestes, rurales y urbanas de difícil acceso.',
-      tag: 'Operaciones SAR'
+      descripcion:
+        'Rastreo sistemático y georreferenciado de personas extraviadas en zonas agrestes, rurales y urbanas de difícil acceso.',
     },
     {
       icon: Shield,
+      codigo: 'AREA-02',
       titulo: 'Rescate en Terreno',
-      descripcion: 'Extracción segura, estabilización y evacuación en escenarios complejos bajo estándares internacionales de protección civil.',
-      tag: 'Intervención'
+      descripcion:
+        'Extracción segura, estabilización y evacuación en escenarios complejos bajo estándares de protección civil.',
     },
     {
       icon: HeartPulse,
+      codigo: 'AREA-03',
       titulo: 'Primeros Auxilios Avanzados',
-      descripcion: 'Atención prehospitalaria inmediata en el punto del incidente para estabilizar pacientes críticos antes del traslado médico.',
-      tag: 'Soporte Vital'
+      descripcion:
+        'Atención prehospitalaria inmediata en el punto del incidente para estabilizar pacientes críticos antes del traslado.',
     },
     {
       icon: Mountain,
+      codigo: 'AREA-04',
       titulo: 'Rescate en Altura',
-      descripcion: 'Maniobras técnicas con sistemas de cuerdas, anclajes y polipastos en pendientes pronunciadas, acantilados y estructuras.',
-      tag: 'Rescate Vertical'
+      descripcion:
+        'Maniobras técnicas con sistemas de cuerdas, anclajes y polipastos en pendientes pronunciadas, quebradas y estructuras.',
     },
     {
       icon: Flame,
+      codigo: 'AREA-05',
       titulo: 'Emergencias y Desastres',
-      descripcion: 'Despliegue rápido frente a terremotos, inundaciones, incendios forestales y remociones en masa en coordinación estatal.',
-      tag: 'Respuesta Rápida'
-    }
+      descripcion:
+        'Despliegue rápido frente a terremotos, inundaciones, incendios forestales y remociones en masa en coordinación estatal.',
+    },
   ];
 
-  const pilaresEstatutarios = [
+  const ambitosEstatutarios = [
     {
       numero: '01',
-      titulo: 'Coordinación Público-Privada',
-      texto: 'Actuamos en estrecha colaboración con organismos del Estado, municipios y empresas privadas para potenciar la capacidad de respuesta regional.'
+      titulo: 'Búsqueda y Rescate',
+      detalle:
+        'Operaciones urbanas y rurales, desastres naturales y zonas de difícil acceso incluyendo montañas, cuevas y cuerpos de agua.',
     },
     {
       numero: '02',
-      titulo: 'Prevención y Simulacros',
-      texto: 'Diseño de planes de emergencia, capacitación técnica y educación comunitaria para construir una sociedad resiliente ante catástrofes.'
+      titulo: 'Prevención y Preparación',
+      detalle:
+        'Programas de capacitación, simulacros de emergencia para comunidades y empresas, y diseño de planes de seguridad.',
     },
     {
       numero: '03',
-      titulo: 'Asistencia Humanitaria',
-      texto: 'Apoyo logístico, distribución de suministros críticos y contención psicológica y social en terreno para comunidades afectadas.'
+      titulo: 'Respuesta Rápida',
+      detalle:
+        'Movilización inmediata de equipos de rescate en estrecha coordinación con organismos gubernamentales y municipales.',
     },
     {
       numero: '04',
-      titulo: 'Investigación y Tecnología',
-      texto: 'Desarrollo e implementación de nuevas metodologías, protocolos operativos y equipamiento táctico junto a instituciones académicas.'
-    }
+      titulo: 'Asistencia Humanitaria',
+      detalle:
+        'Apoyo logístico, distribución de suministros esenciales y soporte psicológico y social a comunidades afectadas.',
+    },
   ];
 
   return (
-    <div className="bg-zinc-950 text-white selection:bg-red-600 selection:text-white">
-
+    <div className="bg-white font-sans text-neutral-950">
       {/* =====================================================================
-          1. HERO SECTION CORPORATIVO DE ALTO IMPACTO
+          1. PORTADA PRINCIPAL (HERO EDITORIAL CORPORATIVO)
       ===================================================================== */}
-      <section className="relative min-h-[92vh] flex items-center pt-28 pb-20 overflow-hidden">
-        {/* Imagen de fondo con overlay dramático */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&q=80&w=2070"
-            alt="Operaciones de rescate en montaña Biobío"
-            className="w-full h-full object-cover object-center opacity-35 scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/90 to-zinc-950/50" />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/60" />
-          {/* Acento rojo sutil */}
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-red-600/20 rounded-full blur-[120px]" />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-
-            {/* Columna Izquierda: Mensaje Principal */}
-            <div className="lg:col-span-8 space-y-8">
-              <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-700/80 backdrop-blur-sm">
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                <span className="text-xs font-extrabold uppercase tracking-widest text-zinc-200">
-                  Organización No Gubernamental · Región del Biobío, Chile
-                </span>
+      <section className="border-b-4 border-amber-400 bg-neutral-950 text-white">
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
+            {/* Columna Izquierda: Posicionamiento Institucional */}
+            <div className="space-y-6 lg:col-span-7">
+              <div className="inline-block rounded bg-red-600 px-3.5 py-1.5 text-xs font-black uppercase tracking-widest text-white shadow-md shadow-red-950/70">
+                Protección Civil · Búsqueda y Rescate · Biobío
               </div>
 
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05] uppercase">
-                Preparados para <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-red-600 to-amber-500">Responder</span>,<br />
-                Comprometidos con la <span className="underline decoration-red-600 decoration-4 underline-offset-8">Vida</span>.
+              <h1 className="text-4xl font-black uppercase leading-[1.06] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Preparados para responder,{' '}
+                <span className="text-amber-400">
+                  comprometidos con la vida.
+                </span>
               </h1>
 
-              <p className="text-lg sm:text-xl text-zinc-300 max-w-2xl leading-relaxed font-normal">
-                Institución técnica de prevención, búsqueda, rescate y protección civil. Operamos con rigor profesional, disciplina operativa y vocación de servicio en escenarios de emergencia y desastres naturales.
+              <p className="max-w-2xl text-base font-semibold leading-relaxed text-neutral-200 sm:text-lg">
+                Organización No Gubernamental de carácter técnico dedicada a la
+                prevención, búsqueda, rescate y gestión de emergencias. Operamos
+                con disciplina, equipamiento especializado y coordinación
+                interinstitucional.
               </p>
 
-              {/* Botones de Acción Corporativos */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-2">
+              {/* Acciones Principales */}
+              <div className="flex flex-col gap-4 pt-2 sm:flex-row">
                 <Link
                   to="/apoyo"
-                  className="inline-flex items-center justify-center gap-3 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-xl font-extrabold text-sm uppercase tracking-wider shadow-[0_10px_35px_rgba(220,38,38,0.45)] hover:shadow-[0_15px_40px_rgba(220,38,38,0.65)] transition-all group"
+                  className="inline-flex items-center justify-center gap-2.5 rounded bg-red-600 px-7 py-4 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-red-950/60 transition-colors hover:bg-red-700 sm:text-sm"
                 >
-                  <Building2 size={20} />
+                  <Building2 size={18} />
                   <span>Solicitar Apoyo Institucional</span>
-                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight size={17} />
                 </Link>
 
                 <Link
                   to="/postular"
-                  className="inline-flex items-center justify-center gap-3 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-zinc-700 hover:border-zinc-500 px-8 py-4 rounded-xl font-bold text-sm uppercase tracking-wider backdrop-blur-sm transition-all"
+                  className="inline-flex items-center justify-center gap-2.5 rounded bg-amber-400 px-7 py-4 text-xs font-black uppercase tracking-wider text-black shadow-lg shadow-amber-950/40 transition-colors hover:bg-amber-300 sm:text-sm"
                 >
-                  <UserPlus size={20} className="text-amber-400" />
+                  <UserPlus size={18} />
                   <span>Postular como Voluntario</span>
                 </Link>
               </div>
 
-              {/* Sellos de Respaldo */}
-              <div className="pt-6 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-8 gap-y-3 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              {/* Acreditación Jurídica */}
+              <div className="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-800 pt-6 text-xs font-extrabold uppercase tracking-wider text-neutral-300">
                 <div className="flex items-center gap-2">
-                  <FileCheck2 size={16} className="text-red-500" />
+                  <FileCheck2 size={17} className="text-red-500" />
                   <span>Constituida bajo Ley N° 20.500</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Shield size={16} className="text-amber-500" />
-                  <span>Estándares de Protección Civil</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Radio size={16} className="text-emerald-500" />
-                  <span>Despliegue Regional y Nacional</span>
+                  <Shield size={17} className="text-amber-400" />
+                  <span>Sin fines de lucro · Carácter Técnico</span>
                 </div>
               </div>
             </div>
 
-            {/* Columna Derecha: Tarjeta Ejecutiva de Identidad */}
-            <div className="lg:col-span-4 hidden lg:block">
-              <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
-
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-36 h-36 rounded-full bg-white p-1 border-4 border-red-600 shadow-[0_0_40px_rgba(220,38,38,0.35)] mb-6">
-                    <img
-                      src="/logo-bre.png"
-                      alt="Escudo BRE Biobío"
-                      className="w-full h-full object-contain rounded-full"
-                    />
+            {/* Columna Derecha: Fotografía Real en Terreno + Ficha Operativa */}
+            <div className="lg:col-span-5">
+              <div className="overflow-hidden rounded-lg border-2 border-neutral-800 bg-neutral-900 shadow-2xl shadow-black">
+                <div className="relative h-72 bg-neutral-800 sm:h-80">
+                  <img
+                    src={fotoPrincipal}
+                    alt="Operaciones O.N.G. BRE BIO BIO en terreno"
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-red-600 bg-black/90 px-5 py-3">
+                    <span className="text-xs font-black uppercase tracking-wider text-white">
+                      O.N.G. BRE BIO BIO
+                    </span>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">
+                      Servicio y Vocación
+                    </span>
                   </div>
+                </div>
 
-                  <span className="text-xs font-black tracking-[0.25em] text-amber-400 uppercase mb-1">
-                    Servicio y Vocación
-                  </span>
-                  <h2 className="text-2xl font-black text-white tracking-wide uppercase mb-3">
-                    O.N.G. BRE BIOBÍO
-                  </h2>
-                  <p className="text-sm text-zinc-400 leading-relaxed mb-6">
-                    Equipo multidisciplinario certificado en rescate técnico, atención prehospitalaria y gestión integral del riesgo de desastres.
-                  </p>
-
-                  <div className="w-full space-y-2.5 text-left bg-zinc-950/70 p-4 rounded-2xl border border-zinc-800/80">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400 font-semibold">Jurisdicción Base</span>
-                      <span className="text-white font-bold">Región del Biobío, Chile</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400 font-semibold">Cobertura Operativa</span>
-                      <span className="text-emerald-400 font-bold">Territorio Nacional</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400 font-semibold">Carácter Institucional</span>
-                      <span className="text-white font-bold">Técnico · Sin Fines de Lucro</span>
-                    </div>
+                <div className="space-y-3 bg-neutral-900 p-6">
+                  <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 text-xs">
+                    <span className="font-bold uppercase text-neutral-400">
+                      Jurisdicción Base
+                    </span>
+                    <span className="font-black text-white">
+                      Región del Biobío, Chile
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 text-xs">
+                    <span className="font-bold uppercase text-neutral-400">
+                      Alcance Operativo
+                    </span>
+                    <span className="font-black text-amber-400">
+                      Regional y Nacional
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold uppercase text-neutral-400">
+                      Estándar de Personal
+                    </span>
+                    <span className="font-black text-white">
+                      Evaluado y Acreditado
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </section>
 
       {/* =====================================================================
-          2. BARRA DE MÉTRICAS Y CAPACIDAD OPERATIVA
+          2. INDICADORES INSTITUCIONALES (CONTRASTE NEGRO / ROJO / AMARILLO)
       ===================================================================== */}
-      <section className="bg-zinc-900 border-y border-zinc-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="border-l-2 border-red-600 pl-4">
-              <p className="text-3xl sm:text-4xl font-black text-white">5 Áreas</p>
-              <p className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-wider mt-1">
-                Especialidades de Rescate
+      <section className="border-b-2 border-neutral-800 bg-neutral-900 text-white">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+            <div className="border-l-4 border-red-600 pl-4">
+              <p className="text-2xl font-black uppercase text-white sm:text-3xl">
+                5 Áreas
+              </p>
+              <p className="mt-0.5 text-xs font-extrabold uppercase tracking-wider text-neutral-300">
+                Especialidades Técnicas
               </p>
             </div>
-            <div className="border-l-2 border-amber-500 pl-4">
-              <p className="text-3xl sm:text-4xl font-black text-white">24 / 7</p>
-              <p className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-wider mt-1">
+            <div className="border-l-4 border-amber-400 pl-4">
+              <p className="text-2xl font-black uppercase text-white sm:text-3xl">
+                24 / 7
+              </p>
+              <p className="mt-0.5 text-xs font-extrabold uppercase tracking-wider text-neutral-300">
                 Disponibilidad de Activación
               </p>
             </div>
-            <div className="border-l-2 border-red-600 pl-4">
-              <p className="text-3xl sm:text-4xl font-black text-white">100%</p>
-              <p className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-wider mt-1">
-                Personal Evaluado y Acreditado
+            <div className="border-l-4 border-red-600 pl-4">
+              <p className="text-2xl font-black uppercase text-white sm:text-3xl">
+                100%
+              </p>
+              <p className="mt-0.5 text-xs font-extrabold uppercase tracking-wider text-neutral-300">
+                Personal Auditado
               </p>
             </div>
-            <div className="border-l-2 border-amber-500 pl-4">
-              <p className="text-3xl sm:text-4xl font-black text-white">Biobío</p>
-              <p className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-wider mt-1">
-                Base Operativa con Alcance Nacional
+            <div className="border-l-4 border-amber-400 pl-4">
+              <p className="text-2xl font-black uppercase text-white sm:text-3xl">
+                Chile
+              </p>
+              <p className="mt-0.5 text-xs font-extrabold uppercase tracking-wider text-neutral-300">
+                Cobertura Nacional
               </p>
             </div>
           </div>
@@ -232,76 +246,78 @@ export default function Home() {
       </section>
 
       {/* =====================================================================
-          3. NUESTRAS 5 ESPECIALIDADES OPERATIVAS (ESTÉTICA AFICHE OFICIAL)
+          3. ESPECIALIDADES OPERATIVAS (BASE BLANCA Y SOMBRAS ARQUITECTÓNICAS)
       ===================================================================== */}
-      <section className="py-24 bg-zinc-950 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
-            <div>
-              <span className="text-red-500 font-black text-xs uppercase tracking-[0.25em]">
-                Capacidades Técnicas
-              </span>
-              <h2 className="text-3xl sm:text-5xl font-black text-white uppercase tracking-tight mt-2">
-                Nuestras Especialidades
-              </h2>
-            </div>
-            <p className="text-zinc-400 max-w-xl text-sm sm:text-base leading-relaxed">
-              Contamos con células operativas entrenadas para intervenir con precisión técnica en entornos agrestes, urbanos y catástrofes de gran magnitud.
+      <section className="bg-white py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-14 border-l-4 border-red-600 pl-5">
+            <span className="text-xs font-black uppercase tracking-[0.2em] text-red-600">
+              Capacidades Técnicas
+            </span>
+            <h2 className="mt-1 text-3xl font-black uppercase tracking-tight text-black sm:text-4xl">
+              Nuestras Especialidades
+            </h2>
+            <p className="mt-2 max-w-2xl text-base font-semibold text-neutral-800">
+              Células operativas entrenadas bajo protocolos estandarizados para
+              intervenir con eficacia en emergencias, catástrofes y rescates
+              complejos.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {especialidades.map((esp, index) => {
+          <div className="grid grid-cols-1 gap-7 md:grid-cols-2 lg:grid-cols-3">
+            {especialidades.map((esp) => {
               const IconComponent = esp.icon;
               return (
                 <div
-                  key={index}
-                  className="group bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 hover:border-red-600/60 rounded-2xl p-8 transition-all duration-300 relative overflow-hidden flex flex-col justify-between"
+                  key={esp.codigo}
+                  className="flex flex-col justify-between rounded-lg border-2 border-neutral-950 bg-white p-7 shadow-[6px_6px_0px_0px_#0a0a0a] transition-all hover:border-red-600 hover:shadow-[6px_6px_0px_0px_#dc2626]"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="w-14 h-14 rounded-2xl bg-zinc-950 border-2 border-amber-500/80 flex items-center justify-center text-white group-hover:bg-red-600 group-hover:border-red-500 transition-colors shadow-lg">
-                        <IconComponent size={28} />
+                    <div className="mb-5 flex items-center justify-between">
+                      <div className="flex h-12 w-12 items-center justify-center rounded border-b-4 border-red-600 bg-black text-amber-400">
+                        <IconComponent size={24} />
                       </div>
-                      <span className="text-[11px] font-extrabold uppercase tracking-widest px-3 py-1 rounded-full bg-zinc-950 text-zinc-400 border border-zinc-800">
-                        {esp.tag}
+                      <span className="rounded border border-neutral-300 bg-neutral-100 px-3 py-1 text-xs font-black uppercase tracking-widest text-neutral-950">
+                        {esp.codigo}
                       </span>
                     </div>
 
-                    <h3 className="text-xl font-black text-white uppercase tracking-wide mb-3 group-hover:text-red-400 transition-colors">
+                    <h3 className="mb-2.5 text-xl font-black uppercase text-black">
                       {esp.titulo}
                     </h3>
-                    <p className="text-zinc-400 text-sm leading-relaxed">
+                    <p className="text-sm font-semibold leading-relaxed text-neutral-800">
                       {esp.descripcion}
                     </p>
                   </div>
 
-                  <div className="mt-8 pt-4 border-t border-zinc-800/60 flex items-center text-xs font-bold text-zinc-300 uppercase tracking-wider group-hover:text-white">
-                    <span>Protocolo Estándar BRE</span>
-                    <ArrowRight size={14} className="ml-2 text-red-500 group-hover:translate-x-1 transition-transform" />
+                  <div className="mt-6 flex items-center justify-between border-t border-neutral-200 pt-4 text-xs font-black uppercase text-neutral-900">
+                    <span>Estándar Operativo BRE</span>
+                    <span className="h-2.5 w-2.5 bg-red-600" />
                   </div>
                 </div>
               );
             })}
 
-            {/* Tarjeta 6: Verificación de Credenciales */}
-            <div className="bg-gradient-to-br from-red-950/60 via-zinc-900 to-zinc-900 border border-red-800/40 rounded-2xl p-8 flex flex-col justify-between">
+            {/* Tarjeta Institucional en Rojo */}
+            <div className="flex flex-col justify-between rounded-lg border-2 border-black bg-red-600 p-7 text-white shadow-[6px_6px_0px_0px_#0a0a0a]">
               <div>
-                <div className="w-14 h-14 rounded-2xl bg-red-600 flex items-center justify-center text-white mb-6 shadow-lg">
-                  <Award size={28} />
-                </div>
-                <h3 className="text-xl font-black text-white uppercase tracking-wide mb-3">
-                  Transparencia y Acreditación
+                <span className="mb-5 inline-block rounded bg-black px-3 py-1 text-xs font-black uppercase tracking-widest text-amber-400">
+                  Acreditación Oficial
+                </span>
+                <h3 className="mb-3 text-2xl font-black uppercase leading-tight">
+                  Personal Evaluado y Certificado
                 </h3>
-                <p className="text-zinc-300 text-sm leading-relaxed">
-                  Cada integrante activo de BRE Biobío cuenta con ficha digital verificable, certificaciones auditadas por el Directorio y registro de especialidades.
+                <p className="text-sm font-semibold leading-relaxed text-white">
+                  Cada miembro activo cumple un proceso formal de postulación,
+                  instrucción técnica y validación documental auditada por
+                  nuestro Directorio.
                 </p>
               </div>
               <Link
                 to="/nosotros"
-                className="mt-8 inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-amber-400 hover:text-amber-300"
+                className="mt-6 inline-flex items-center justify-center gap-2 rounded bg-black px-5 py-3.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-900"
               >
-                <span>Conocer Estructura Institucional</span>
+                <span>Ver Estructura Institucional</span>
                 <ArrowRight size={15} />
               </Link>
             </div>
@@ -310,129 +326,193 @@ export default function Home() {
       </section>
 
       {/* =====================================================================
-          4. PILARES CORPORATIVOS Y ESTATUTARIOS
+          4. GALERÍA AUTOMÁTICA DE ACTIVIDAD EN TERRENO
       ===================================================================== */}
-      <section className="py-24 bg-white text-zinc-950">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
-
-            <div className="lg:col-span-5 space-y-6">
-              <span className="text-red-600 font-black text-xs uppercase tracking-[0.25em]">
-                Gobernanza y Compromiso
+      <section className="border-y-2 border-neutral-300 bg-neutral-100 py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div className="border-l-4 border-amber-500 pl-5">
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-800">
+                Registro Operativo
               </span>
-              <h2 className="text-3xl sm:text-5xl font-black tracking-tight uppercase leading-tight">
-                Rigor Técnico al Servicio de la Comunidad
+              <h2 className="mt-1 text-3xl font-black uppercase tracking-tight text-black sm:text-4xl">
+                Despliegue y Capacitación en Terreno
               </h2>
-              <p className="text-zinc-600 text-base leading-relaxed">
-                Más allá de la respuesta en terreno, BRE Biobío opera bajo una estructura formal con Directorio, Comisión de Ética y Comisión Revisora de Cuentas, garantizando seriedad institucional ante organismos públicos y empresas privadas.
-              </p>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded border-2 border-neutral-900 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wider text-neutral-900 shadow-sm">
+              <Camera size={16} className="text-red-600" />
+              <span>Archivo Fotográfico Institucional</span>
+            </div>
+          </div>
 
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center gap-3 text-sm font-bold text-zinc-800">
-                  <CheckCircle2 size={20} className="text-red-600 shrink-0" />
-                  <span>Sin fines de lucro ni afiliación político-partidista</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm font-bold text-zinc-800">
-                  <CheckCircle2 size={20} className="text-red-600 shrink-0" />
-                  <span>Capacitación continua y simulacros certificados</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm font-bold text-zinc-800">
-                  <CheckCircle2 size={20} className="text-red-600 shrink-0" />
-                  <span>Convenios de cooperación con municipios y empresas</span>
+          <div className="grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3">
+            {galeriaMostrar.map((src, idx) => (
+              <div
+                key={idx}
+                className="group overflow-hidden rounded-lg border-2 border-neutral-950 bg-white shadow-lg shadow-neutral-950/15"
+              >
+                <div className="relative h-64 overflow-hidden bg-neutral-900">
+                  <img
+                    src={src}
+                    alt={`Registro operativo O.N.G. BRE BIO BIO #${idx + 1}`}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-amber-400 bg-neutral-950/90 px-4 py-2.5">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-white">
+                      O.N.G. BRE BIO BIO
+                    </span>
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400">
+                      Reg. #{String(idx + 1).padStart(2, '0')}
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              <div className="pt-4">
-                <Link
-                  to="/nosotros"
-                  className="inline-flex items-center gap-2 bg-zinc-950 hover:bg-zinc-800 text-white px-6 py-3.5 rounded-xl font-bold text-sm uppercase tracking-wider transition-all"
-                >
-                  <span>Ver Misión, Visión y Estatutos</span>
-                  <ArrowRight size={16} />
-                </Link>
-              </div>
-            </div>
-
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {pilaresEstatutarios.map((pilar) => (
-                <div
-                  key={pilar.numero}
-                  className="bg-zinc-50 border border-zinc-200/90 rounded-2xl p-7 hover:shadow-xl transition-shadow"
-                >
-                  <span className="text-3xl font-black text-red-600/25 block mb-3">
-                    {pilar.numero}
-                  </span>
-                  <h3 className="text-lg font-black text-zinc-900 uppercase mb-2">
-                    {pilar.titulo}
-                  </h3>
-                  <p className="text-sm text-zinc-600 leading-relaxed">
-                    {pilar.texto}
-                  </p>
-                </div>
-              ))}
-            </div>
-
+            ))}
           </div>
         </div>
       </section>
 
       {/* =====================================================================
-          5. CALL TO ACTION DUAL (EMPRESAS/MUNICIPIOS VS VOLUNTARIOS)
+          5. MARCO ESTATUTARIO Y GOBERNANZA (ARTÍCULO CUARTO)
       ===================================================================== */}
-      <section className="py-24 bg-zinc-950 border-t border-zinc-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <section className="bg-neutral-950 py-20 text-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
+            <div className="space-y-5 lg:col-span-5">
+              <span className="inline-block rounded bg-amber-400 px-3 py-1 text-xs font-black uppercase tracking-widest text-black">
+                Gobernanza y Respaldo Legal
+              </span>
+              <h2 className="text-3xl font-black uppercase leading-tight sm:text-4xl">
+                Organización Formal y Compromiso Comunitario
+              </h2>
+              <p className="text-base font-semibold leading-relaxed text-neutral-200">
+                Regida por el Título XXXIII del Libro Primero del Código Civil y
+                la Ley N° 20.500. Nuestra estructura contempla Directorio,
+                Comisión Revisora de Cuentas y Comisión de Ética para garantizar
+                transparencia y probidad.
+              </p>
 
-            {/* Bloque Organizaciones y Empresas */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-10 flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-red-600/10 rounded-full blur-3xl" />
-              <div>
-                <span className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-red-500 mb-4">
-                  <Building2 size={16} /> Alianzas y Operaciones
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-black text-white uppercase mb-4">
-                  ¿Representas a una Institución, Municipio o Empresa?
-                </h3>
-                <p className="text-zinc-400 text-sm sm:text-base leading-relaxed mb-8">
-                  Solicita apoyo operativo en emergencias, cobertura preventiva en eventos de alto riesgo, capacitaciones en primeros auxilios o desarrollo de planes de contingencia.
-                </p>
+              <ul className="space-y-3 pt-2 text-sm font-bold text-white">
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={19}
+                    className="shrink-0 text-amber-400"
+                  />
+                  <span>
+                    Colaboración directa con Estamentos Públicos y Privados
+                  </span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={19}
+                    className="shrink-0 text-amber-400"
+                  />
+                  <span>
+                    Sin fines de lucro ni afiliación político-partidista
+                  </span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2
+                    size={19}
+                    className="shrink-0 text-amber-400"
+                  />
+                  <span>
+                    Investigación y desarrollo en técnicas de rescate
+                  </span>
+                </li>
+              </ul>
+
+              <div className="pt-4">
+                <Link
+                  to="/nosotros"
+                  className="inline-flex items-center gap-2 rounded bg-white px-6 py-3.5 text-xs font-black uppercase tracking-wider text-black transition-colors hover:bg-neutral-200"
+                >
+                  <span>Conocer Estatutos y Directorio</span>
+                  <ArrowRight size={16} />
+                </Link>
               </div>
-              <Link
-                to="/apoyo"
-                className="inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-extrabold text-sm uppercase tracking-wider py-4 px-6 rounded-xl transition-all"
-              >
-                <span>Canal de Solicitud Institucional</span>
-                <ArrowRight size={18} />
-              </Link>
             </div>
 
-            {/* Bloque Postulantes y Voluntarios */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-10 flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl" />
-              <div>
-                <span className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-amber-400 mb-4">
-                  <Users size={16} /> Reclutamiento Oficial
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-black text-white uppercase mb-4">
-                  ¿Tienes Vocación de Servicio y Disciplina Operativa?
-                </h3>
-                <p className="text-zinc-400 text-sm sm:text-base leading-relaxed mb-8">
-                  Integra nuestras filas iniciando tu proceso formal como Postulante o Colaborador. Accede a formación especializada, entrenamiento en terreno y acreditación oficial.
-                </p>
-              </div>
-              <Link
-                to="/postular"
-                className="inline-flex items-center justify-center gap-2 bg-white hover:bg-zinc-200 text-zinc-950 font-extrabold text-sm uppercase tracking-wider py-4 px-6 rounded-xl transition-all"
-              >
-                <span>Iniciar Proceso de Postulación</span>
-                <ArrowRight size={18} />
-              </Link>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-7">
+              {ambitosEstatutarios.map((amb) => (
+                <div
+                  key={amb.numero}
+                  className="rounded-lg border-2 border-neutral-800 bg-neutral-900 p-6 shadow-lg shadow-black/70"
+                >
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="rounded bg-red-600 px-2.5 py-1 text-xs font-black text-white">
+                      {amb.numero}
+                    </span>
+                    <h3 className="text-lg font-black uppercase text-white">
+                      {amb.titulo}
+                    </h3>
+                  </div>
+                  <p className="text-sm font-semibold leading-relaxed text-neutral-300">
+                    {amb.detalle}
+                  </p>
+                </div>
+              ))}
             </div>
-
           </div>
         </div>
       </section>
 
+      {/* =====================================================================
+          6. CANALES DE ACCIÓN DIRECTA
+      ===================================================================== */}
+      <section className="border-t-4 border-red-600 bg-white py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            {/* Canal Institucional */}
+            <div className="flex flex-col justify-between rounded-lg border-2 border-black bg-neutral-950 p-9 text-white shadow-[8px_8px_0px_0px_#dc2626]">
+              <div>
+                <span className="mb-2 block text-xs font-black uppercase tracking-widest text-red-500">
+                  Empresas · Municipios · Organismos
+                </span>
+                <h3 className="mb-4 text-2xl font-black uppercase sm:text-3xl">
+                  Solicitar Apoyo Técnico u Operativo
+                </h3>
+                <p className="mb-8 text-sm font-semibold leading-relaxed text-neutral-200 sm:text-base">
+                  Coordina apoyo en emergencias, cobertura preventiva,
+                  simulacros o capacitación en primeros auxilios y gestión de
+                  riesgos para tu institución.
+                </p>
+              </div>
+              <Link
+                to="/apoyo"
+                className="inline-flex items-center justify-center gap-2 rounded bg-red-600 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-red-700"
+              >
+                <span>Ingresar Solicitud Institucional</span>
+                <ArrowRight size={17} />
+              </Link>
+            </div>
+
+            {/* Canal Postulantes */}
+            <div className="flex flex-col justify-between rounded-lg border-2 border-black bg-amber-400 p-9 text-black shadow-[8px_8px_0px_0px_#0a0a0a]">
+              <div>
+                <span className="mb-2 block text-xs font-black uppercase tracking-widest text-neutral-900">
+                  Reclutamiento Oficial
+                </span>
+                <h3 className="mb-4 text-2xl font-black uppercase sm:text-3xl">
+                  Postulación de Voluntarios y Colaboradores
+                </h3>
+                <p className="mb-8 text-sm font-bold leading-relaxed text-neutral-950 sm:text-base">
+                  Integra una institución organizada y preparada. Inicia tu
+                  proceso formal de postulación, acredita tus certificaciones y
+                  fórmate en terreno.
+                </p>
+              </div>
+              <Link
+                to="/postular"
+                className="inline-flex items-center justify-center gap-2 rounded bg-black px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-900"
+              >
+                <span>Postular a O.N.G. BRE BIO BIO</span>
+                <ArrowRight size={17} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

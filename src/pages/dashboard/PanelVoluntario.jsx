@@ -26,14 +26,47 @@ export default function PanelVoluntario() {
     fecha: '',
   });
   const [file, setFile] = useState(null);
+  const [datosPerfil, setDatosPerfil] = useState({
+    nombre_completo: '',
+    rut: '',
+    telefono: '',
+  });
+  const [savingPerfil, setSavingPerfil] = useState(false);
+  const [perfilMsg, setPerfilMsg] = useState('');
 
   useEffect(() => {
     if (profile?.id) {
+      setDatosPerfil({
+        nombre_completo: profile.nombre_completo || '',
+        rut: profile.rut || '',
+        telefono: profile.telefono || '',
+      });
       fetchCertificados();
     } else {
       setLoading(false);
     }
   }, [profile]);
+
+  const handleGuardarPerfil = async (e) => {
+    e.preventDefault();
+    if (!profile?.id) return;
+    setSavingPerfil(true);
+    setPerfilMsg('');
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update({
+        nombre_completo: datosPerfil.nombre_completo,
+        rut: datosPerfil.rut || null,
+        telefono: datosPerfil.telefono || null,
+      })
+      .eq('id', profile.id);
+
+    setSavingPerfil(false);
+    setPerfilMsg(
+      error ? 'Error al guardar datos.' : 'Datos actualizados correctamente.'
+    );
+  };
 
   const fetchCertificados = async () => {
     setLoading(true);
@@ -208,8 +241,84 @@ export default function PanelVoluntario() {
         </header>
 
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* Columna Izquierda: Formulario de Subida */}
-          <div className="lg:col-span-1">
+          {/* Columna Izquierda: Datos Personales + Formulario de Subida */}
+          <div className="space-y-6 lg:col-span-1">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-xl font-bold text-gray-800">
+                Mis Datos de Ficha
+              </h2>
+              <form onSubmit={handleGuardarPerfil} className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Nombre Completo
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={datosPerfil.nombre_completo}
+                    onChange={(e) =>
+                      setDatosPerfil({
+                        ...datosPerfil,
+                        nombre_completo: e.target.value,
+                      })
+                    }
+                    className="w-full rounded border border-gray-300 p-2 text-sm outline-none focus:ring-2 focus:ring-red-600"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    RUT
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="12.345.678-9"
+                    value={datosPerfil.rut}
+                    onChange={(e) =>
+                      setDatosPerfil({ ...datosPerfil, rut: e.target.value })
+                    }
+                    className="w-full rounded border border-gray-300 p-2 text-sm outline-none focus:ring-2 focus:ring-red-600"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+56 9 1234 5678"
+                    value={datosPerfil.telefono}
+                    onChange={(e) =>
+                      setDatosPerfil({
+                        ...datosPerfil,
+                        telefono: e.target.value,
+                      })
+                    }
+                    className="w-full rounded border border-gray-300 p-2 text-sm outline-none focus:ring-2 focus:ring-red-600"
+                  />
+                </div>
+                {perfilMsg && (
+                  <p className="text-xs font-semibold text-gray-700">
+                    {perfilMsg}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={savingPerfil}
+                  className="w-full rounded bg-black px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {savingPerfil ? 'Guardando...' : 'Actualizar Datos'}
+                </button>
+                {datosPerfil.rut && (
+                  <Link
+                    to={`/voluntario/${encodeURIComponent(datosPerfil.rut)}`}
+                    className="block text-center text-xs font-semibold text-red-600 hover:underline"
+                  >
+                    Ver mi ficha pública →
+                  </Link>
+                )}
+              </form>
+            </div>
+
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
               <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-gray-800">
                 <Upload size={20} className="text-red-600" /> Nuevo Certificado

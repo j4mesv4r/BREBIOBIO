@@ -18,6 +18,11 @@ create policy "Usuarios autenticados pueden ver su propio perfil"
   on public.perfiles for select
   using (auth.uid() = id);
 
+create policy "Usuarios autenticados pueden actualizar su propio perfil"
+  on public.perfiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
 create policy "Lectura pública de perfiles activos para ficha"
   on public.perfiles for select
   using (activo = true);
