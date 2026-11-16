@@ -8,3 +8,51 @@
   }
 }
 
+/* ==========================================================================
+   SISTEMA DE PROFUNDIDAD 3D CORPORATIVO - O.N.G. BRE BIO BIO (CSS PURO)
+   ========================================================================== */
+.escena-3d {
+  perspective: 1400px;
+}
+
+.tarjeta-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease;
+  will-change: transform;
+}
+
+.tarjeta-3d:hover {
+  transform: translateY(-8px) rotateX(3deg) rotateY(-3deg);
+}
+
+.tarjeta-3d-inversa:hover {
+  transform: translateY(-8px) rotateX(3deg) rotateY(3deg);
+}
+
+.capa-z-10 {
+  transform: translateZ(18px);
+}
+
+.capa-z-20 {
+  transform: translateZ(32px);
+}
+
+.sombra-volumetrica-oscura {
+  box-shadow:
+    0 18px 35px -12px rgba(0, 0, 0, 0.75),
+    0 8px 16px -8px rgba(220, 38, 38, 0.25);
+}
+
+.sombra-volumetrica-clara {
+  box-shadow:
+    0 20px 40px -15px rgba(10, 10, 10, 0.22),
+    0 6px 14px -6px rgba(10, 10, 10, 0.12);
+}
+
+.sombra-volumetrica-clara:hover {
+  box-shadow:
+    0 28px 50px -15px rgba(220, 38, 38, 0.28),
+    0 10px 20px -8px rgba(10, 10, 10, 0.2);
+}
+
