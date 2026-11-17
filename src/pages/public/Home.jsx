@@ -7,7 +7,6 @@ import {
   QrCode,
   CheckCircle2,
   FileCheck2,
-  Users,
   HeartHandshake,
   Search,
   Award,
@@ -17,7 +16,7 @@ import {
 /**
  * FOTOGRAFÍAS INSTITUCIONALES REEMPLAZABLES:
  * Guarda las fotos originales de tu equipo en `public/terreno/` con estos nombres:
- * - `/terreno/equipo-principal.jpg` (Foto grupal del equipo que aparece en tu afiche/pendón)
+ * - `/terreno/equipo-principal.jpg`
  * - `/terreno/operativo-bosque.jpg`
  * - `/terreno/primeros-auxilios.jpg`
  * - `/terreno/rescate-altura.jpg`
@@ -51,7 +50,7 @@ const FOTOS_INSTITUCIONALES = {
 
 /* Biseles 3D Difuminados (Interior + Exterior suave) */
 const BEVEL_CARD_WHITE =
-  'bg-gradient-to-b from-white via-white to-neutral-50/95 border border-neutral-200/80 shadow-[inset_0_2px_4px_rgba(255,255,255,1),inset_0_-4px_10px_rgba(0,0,0,0.05),0_20px_45px_-12px_rgba(15,23,42,0.14),0_6px_16px_-4px_rgba(15,23,42,0.07)]';
+  'bg-gradient-to-b from-white/95 via-white/95 to-neutral-50/95 backdrop-blur-[2px] border border-neutral-200/90 shadow-[inset_0_2px_4px_rgba(255,255,255,1),inset_0_-4px_10px_rgba(0,0,0,0.06),0_20px_45px_-12px_rgba(15,23,42,0.16),0_6px_16px_-4px_rgba(15,23,42,0.08)]';
 
 const BEVEL_BTN_YELLOW =
   'bg-gradient-to-b from-[#FFD25A] via-[#F2B632] to-[#DDA018] text-[#0A0A0A] shadow-[inset_0_2px_3px_rgba(255,255,255,0.85),inset_0_-4px_8px_rgba(140,88,0,0.45),0_14px_28px_-6px_rgba(242,182,50,0.45),0_6px_12px_-3px_rgba(0,0,0,0.25)]';
@@ -97,39 +96,150 @@ const IconoEmergencias = () => (
   </svg>
 );
 
-/* Fondo Vectorial Táctico y Zona Agreste Difuminado sobre Blanco */
-const FondoTacticoAgreste = () => (
-  <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
-    <svg className="absolute inset-0 w-full h-full opacity-[0.045]" xmlns="http://www.w3.org/2000/svg">
+/**
+ * MAPA TOPOGRÁFICO EN RELIEVE 3D (POLILÍNEAS NEGRO / ROJO · REGIÓN DEL BIOBÍO)
+ * Simula curvas de nivel de elevación (costa del Golfo de Arauco, cuenca del río Biobío
+ * y macizos cordilleranos de Antuco/Alto Biobío) con sombra proyectada para efecto 3D.
+ */
+const MapaRelieveBiobio = () => (
+  <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0 bg-gradient-to-b from-neutral-50 via-white to-neutral-100/90">
+    {/* Retícula Cartográfica UTM */}
+    <svg className="absolute inset-0 w-full h-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <pattern id="sar-grid" width="90" height="90" patternUnits="userSpaceOnUse">
-          <path d="M 90 0 L 0 0 0 90" fill="none" stroke="#0A0A0A" strokeWidth="0.9" />
-          <circle cx="45" cy="45" r="1.5" fill="#D90429" />
-        </pattern>
-        <pattern id="topo-agreste" width="500" height="360" patternUnits="userSpaceOnUse">
-          <path
-            d="M0 90 C 140 30, 320 150, 500 90 M0 190 C 160 120, 310 260, 500 190 M0 290 C 120 230, 360 340, 500 290"
-            fill="none"
-            stroke="#0A0A0A"
-            strokeWidth="1.4"
-            strokeDasharray="8 6"
-          />
+        <pattern id="utm-grid-biobio" width="120" height="120" patternUnits="userSpaceOnUse">
+          <path d="M 120 0 L 0 0 0 120" fill="none" stroke="#0A0A0A" strokeWidth="0.8" />
+          <path d="M 60 56 V 64 M 56 60 H 64" stroke="#D90429" strokeWidth="1" />
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#sar-grid)" />
-      <rect width="100%" height="100%" fill="url(#topo-agreste)" />
+      <rect width="100%" height="100%" fill="url(#utm-grid-biobio)" />
     </svg>
 
-    <div className="absolute top-12 -left-32 w-[480px] h-[480px] rounded-full bg-red-600/[0.06] blur-[110px]" />
-    <div className="absolute top-1/3 -right-32 w-[480px] h-[480px] rounded-full bg-amber-400/[0.09] blur-[110px]" />
-
+    {/* Polilíneas Topográficas de Elevación con Sombra de Relieve 3D */}
     <svg
-      className="absolute bottom-0 left-0 w-full h-64 text-neutral-900/[0.04]"
-      viewBox="0 0 1440 320"
-      preserveAspectRatio="none"
-      fill="currentColor"
+      className="absolute inset-0 w-full h-full"
+      viewBox="0 0 1440 1200"
+      preserveAspectRatio="xMidYMid slice"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M0,288L120,214L260,268L420,118L580,248L740,86L920,235L1100,108L1280,232L1440,152L1440,320L0,320Z" />
+      <defs>
+        {/* Sombra de relieve 3D para las curvas de nivel */}
+        <filter id="relieve-3d" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="4" stdDeviation="2.5" floodColor="#0A0A0A" floodOpacity="0.16" />
+        </filter>
+        <radialGradient id="cota-alta-roja" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#D90429" stopOpacity="0.14" />
+          <stop offset="65%" stopColor="#D90429" stopOpacity="0.04" />
+          <stop offset="100%" stopColor="#D90429" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="cota-oscura" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#0A0A0A" stopOpacity="0.09" />
+          <stop offset="100%" stopColor="#0A0A0A" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* Volúmenes hipsométricos difuminados (Cordillera del Biobío y Nahuelbuta) */}
+      <ellipse cx="1180" cy="280" rx="440" ry="320" fill="url(#cota-alta-roja)" />
+      <ellipse cx="260" cy="760" rx="420" ry="300" fill="url(#cota-oscura)" />
+      <ellipse cx="1050" cy="960" rx="480" ry="280" fill="url(#cota-alta-roja)" />
+
+      {/* Grupo de Polilíneas Topográficas con Relieve 3D */}
+      <g filter="url(#relieve-3d)">
+        {/* Cuenca del Río Biobío y Valle Central (Curvas negras de base) */}
+        <path
+          d="M-60,180 C180,140 310,290 540,240 C790,185 920,60 1180,110 C1320,135 1420,90 1510,120"
+          stroke="#0A0A0A"
+          strokeOpacity="0.16"
+          strokeWidth="1.6"
+        />
+        <path
+          d="M-60,240 C210,195 340,350 580,295 C830,235 960,105 1210,165 C1350,200 1440,155 1510,185"
+          stroke="#0A0A0A"
+          strokeOpacity="0.2"
+          strokeWidth="2"
+        />
+        {/* Curva Maestra Roja (Cota 1.200m) */}
+        <path
+          d="M-60,305 C230,255 370,415 620,355 C870,295 1000,160 1245,225 C1375,260 1450,220 1510,250"
+          stroke="#D90429"
+          strokeOpacity="0.32"
+          strokeWidth="2.4"
+        />
+
+        {/* Macizo Cordillerano / Sector Antuco - Alto Biobío (Anillos concéntricos en relieve) */}
+        <path
+          d="M920,240 C990,150 1160,130 1270,200 C1380,270 1390,410 1280,475 C1170,540 990,515 915,430 C855,360 870,305 920,240 Z"
+          stroke="#0A0A0A"
+          strokeOpacity="0.18"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M965,265 C1020,195 1150,180 1240,235 C1325,288 1330,390 1245,440 C1160,490 1020,470 960,405 C915,355 925,315 965,265 Z"
+          stroke="#D90429"
+          strokeOpacity="0.34"
+          strokeWidth="2.3"
+        />
+        <path
+          d="M1015,290 C1055,240 1145,230 1205,270 C1265,310 1270,375 1210,410 C1150,445 1055,430 1012,382 C980,345 985,325 1015,290 Z"
+          stroke="#0A0A0A"
+          strokeOpacity="0.24"
+          strokeWidth="2"
+        />
+        {/* Cumbre / Cota Máxima Roja */}
+        <path
+          d="M1065,318 C1090,288 1140,282 1175,305 C1210,328 1212,362 1178,382 C1144,402 1088,392 1063,365 C1045,345 1048,335 1065,318 Z"
+          stroke="#D90429"
+          strokeOpacity="0.45"
+          strokeWidth="2.6"
+        />
+
+        {/* Cordillera de Nahuelbuta / Borde Costero Golfo de Arauco (Izquierda / Centro) */}
+        <path
+          d="M-80,620 C90,540 280,555 410,645 C540,735 530,895 390,975 C250,1055 40,1035 -80,940"
+          stroke="#0A0A0A"
+          strokeOpacity="0.18"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M-60,675 C85,605 245,620 355,695 C465,770 455,890 340,955 C225,1020 55,1000 -60,915"
+          stroke="#D90429"
+          strokeOpacity="0.3"
+          strokeWidth="2.3"
+        />
+        <path
+          d="M-40,730 C75,675 205,685 295,745 C385,805 375,890 285,938 C195,986 60,970 -40,898"
+          stroke="#0A0A0A"
+          strokeOpacity="0.22"
+          strokeWidth="1.9"
+        />
+        <path
+          d="M10,785 C90,745 175,752 235,792 C295,832 288,888 228,918 C168,948 78,938 10,888 Z"
+          stroke="#D90429"
+          strokeOpacity="0.38"
+          strokeWidth="2.4"
+        />
+
+        {/* Polilíneas inferiores de elevación continua */}
+        <path
+          d="M-60,1080 C220,990 480,1140 760,1040 C1040,940 1240,1090 1510,990"
+          stroke="#0A0A0A"
+          strokeOpacity="0.2"
+          strokeWidth="2"
+        />
+        <path
+          d="M-60,1135 C240,1045 500,1190 780,1090 C1060,990 1260,1140 1510,1045"
+          stroke="#D90429"
+          strokeOpacity="0.32"
+          strokeWidth="2.5"
+        />
+      </g>
+
+      {/* Cotas cartográficas discretas (Nivel Técnico SAR) */}
+      <g fill="#0A0A0A" fillOpacity="0.32" fontSize="10" fontWeight="800" fontFamily="monospace">
+        <text x="1105" y="348">▲ COTA 2.979m · BIOBÍO</text>
+        <text x="135" y="845">▲ NAHUELBUTA · SECTOR OESTE</text>
+        <text x="640" y="342" fill="#D90429" fillOpacity="0.45">36°49&apos;S 73°06&apos;W · SAN PEDRO DE LA PAZ</text>
+      </g>
     </svg>
   </div>
 );
@@ -194,7 +304,7 @@ export default function Home() {
           1. HERO PRINCIPAL CON FOTOGRAFÍA DEL EQUIPO CLARAMENTE VISIBLE
       ===================================================================== */}
       <section className="relative bg-[#0A0A0A] text-white overflow-hidden shadow-[inset_0_-10px_25px_rgba(0,0,0,0.7),0_25px_50px_-12px_rgba(0,0,0,0.45)]">
-        {/* Fotografía de fondo del Equipo con alta visibilidad (opacity-65 y contraste nítido) */}
+        {/* Fotografía de fondo del Equipo con alta visibilidad */}
         <img
           src={FOTOS_INSTITUCIONALES.equipoHero.local}
           onError={(e) => {
@@ -205,14 +315,14 @@ export default function Home() {
           className="absolute inset-0 w-full h-full object-cover object-center grayscale contrast-110 brightness-95 opacity-65 pointer-events-none"
         />
 
-        {/* Degradado lateral inteligente: protege la lectura a la izquierda y deja ver la imagen a la derecha */}
+        {/* Degradado lateral inteligente */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]/95 via-[#0A0A0A]/75 to-[#0A0A0A]/20 pointer-events-none" />
         <div className="hidden lg:block absolute top-0 right-0 w-[36%] h-full bg-gradient-to-b from-[#D90429]/25 via-transparent to-[#0A0A0A]/40 border-l-2 border-[#F2B632]/60 transform -skew-x-12 translate-x-20 pointer-events-none" />
 
         <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 py-16 lg:py-24 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
 
-            {/* Columna Izquierda: Mensaje + Personalidad Jurídica Oficial */}
+            {/* Columna Izquierda */}
             <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
 
               {/* Insignia de Personalidad Jurídica N° 374054 */}
@@ -279,7 +389,7 @@ export default function Home() {
             <div className="lg:col-span-5 flex flex-col items-center lg:items-end">
               <div className="w-full max-w-md bg-gradient-to-b from-white via-white to-neutral-100 text-[#0A0A0A] rounded-3xl p-5 sm:p-6 ring-1 ring-white/90 shadow-[inset_0_2px_5px_rgba(255,255,255,1),inset_0_-6px_14px_rgba(0,0,0,0.08),0_30px_60px_-12px_rgba(0,0,0,0.85)] space-y-5">
 
-                {/* Fotografía del Equipo en Terreno dentro de la portada */}
+                {/* Fotografía del Equipo en Terreno */}
                 <div className="relative h-48 sm:h-52 w-full rounded-2xl overflow-hidden shadow-[0_12px_25px_-6px_rgba(0,0,0,0.35)] ring-2 ring-[#D90429]">
                   <img
                     src={FOTOS_INSTITUCIONALES.equipoHero.local}
@@ -410,10 +520,10 @@ export default function Home() {
       </section>
 
       {/* =====================================================================
-          3. CUERPO PRINCIPAL CON VECTORES TÁCTICOS / ZONA AGRESTE DIFUMINADOS
+          3. CUERPO PRINCIPAL SOBRE MAPA TOPOGRÁFICO EN RELIEVE DE LA REGIÓN DEL BIOBÍO
       ===================================================================== */}
       <div className="relative bg-white">
-        <FondoTacticoAgreste />
+        <MapaRelieveBiobio />
 
         {/* SECCIÓN ESPECIALIDADES */}
         <section className="py-20 lg:py-24 relative z-10">
@@ -429,7 +539,7 @@ export default function Home() {
               <h2 className="text-3xl sm:text-5xl font-black uppercase tracking-tight text-[#0A0A0A]">
                 Ámbitos de Acción Institucional
               </h2>
-              <p className="mt-3 max-w-2xl text-sm sm:text-base font-bold text-neutral-600">
+              <p className="mt-3 max-w-2xl text-sm sm:text-base font-bold text-neutral-700">
                 Unidades operativas entrenadas para intervenir en emergencias urbanas, rurales, alta montaña y desastres naturales.
               </p>
             </div>
@@ -473,7 +583,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* SECCIÓN GALERÍA OPERATIVA Y RECLUTAMIENTO */}
+        {/* SECCIÓN GALERÍA OPERATIVA Y RECLUTAMIENTO (POSTULANTES DESDE LOS 16 AÑOS) */}
         <section className="py-16 lg:py-24 relative z-10 border-t border-neutral-200/70">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
@@ -546,13 +656,18 @@ export default function Home() {
 
               </div>
 
-              {/* Tarjeta Biselada de Convocatoria y Respaldo Jurídico */}
+              {/* Tarjeta Biselada de Convocatoria (Postulantes desde los 16 años) */}
               <div className="lg:col-span-5">
                 <div className="bg-gradient-to-b from-white via-white to-neutral-50 rounded-3xl p-8 sm:p-10 border border-neutral-200/90 shadow-[inset_0_2px_5px_rgba(255,255,255,1),inset_0_-6px_14px_rgba(217,4,41,0.06),0_28px_60px_-15px_rgba(15,23,42,0.2),0_10px_25px_-8px_rgba(217,4,41,0.12)] space-y-6 relative overflow-hidden">
                   <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-[#D90429] via-[#F2B632] to-[#D90429]" />
 
-                  <div className="inline-block bg-gradient-to-b from-[#23272F] to-[#0A0A0A] text-[#F2B632] px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-md">
-                    Admisión de Voluntarios
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="bg-gradient-to-b from-[#23272F] to-[#0A0A0A] text-[#F2B632] px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-md">
+                      Admisión de Voluntarios
+                    </span>
+                    <span className="bg-[#D90429]/10 text-[#D90429] border border-[#D90429]/30 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider">
+                      Desde 16 Años
+                    </span>
                   </div>
 
                   <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tight leading-none text-[#0A0A0A]">
@@ -563,22 +678,26 @@ export default function Home() {
                     Tu vocación puede convertirse en acción. Pon tus capacidades al servicio de quienes más lo necesitan.
                   </p>
 
-                  <p className="text-sm font-semibold text-neutral-600 leading-relaxed">
-                    Intégrate como Voluntario Operativo o Colaborador Técnico en una institución formalmente constituida e inscrita en el Registro Nacional de Personas Jurídicas sin Fines de Lucro.
+                  <p className="text-sm font-semibold text-neutral-700 leading-relaxed">
+                    Convocatoria abierta para personas desde los <strong>16 años</strong>. Los postulantes de <strong>16 y 17 años</strong> pueden incorporarse con <strong>autorización expresa de sus padres o apoderados</strong>, desempeñando labores administrativas u operativas en terreno que no comprometan ni pongan en riesgo su integridad.
                   </p>
 
                   <ul className="space-y-3 text-xs font-extrabold text-[#0A0A0A]">
-                    <li className="flex items-center gap-2.5">
-                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0" strokeWidth={2.5} />
-                      <span>Personalidad Jurídica N° 374054 · Estado Vigente.</span>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0 mt-0.5" strokeWidth={2.5} />
+                      <span>
+                        <strong>16 y 17 años:</strong> Ingreso con autorización notarial/expresa de padres en apoyo logístico, administrativo o terreno seguro.
+                      </span>
                     </li>
-                    <li className="flex items-center gap-2.5">
-                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0" strokeWidth={2.5} />
-                      <span>Credencial Oficial con verificación pública vía QR.</span>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0 mt-0.5" strokeWidth={2.5} />
+                      <span>
+                        <strong>Mayores de 18 años:</strong> Despliegue operativo integral, búsqueda y rescate técnico.
+                      </span>
                     </li>
-                    <li className="flex items-center gap-2.5">
-                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0" strokeWidth={2.5} />
-                      <span>Programas de entrenamiento y simulacros en terreno.</span>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 size={18} className="text-[#D90429] shrink-0 mt-0.5" strokeWidth={2.5} />
+                      <span>Credencial Oficial con verificación pública vía QR (PJ N° 374054).</span>
                     </li>
                   </ul>
 
