@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Package, Plus, X } from 'lucide-react';
-import Navbar from '../../components/layout/Navbar';
-import Sidebar from '../../components/layout/Sidebar';
+import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
 
 export default function Inventario() {
@@ -65,101 +64,93 @@ export default function Inventario() {
       case 'Operativo':
         return 'bg-green-100 text-green-800';
       case 'En mantención':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-100 text-amber-800';
       default:
         return 'bg-red-100 text-red-800';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="flex flex-col md:flex-row">
-        <Sidebar />
-        <main className="flex-1 p-6 md:p-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="flex items-center gap-2 text-2xl font-black text-gray-900">
-                <Package className="text-red-600" />
-                INVENTARIO Y LOGÍSTICA
-              </h1>
-              <p className="text-sm text-gray-600">
-                Control de equipamiento de rescate, comunicaciones y vehículos.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-red-700"
-            >
-              <Plus size={18} /> Agregar Equipo
-            </button>
+    <DashboardLayout
+      title="Inventario y Logística"
+      subtitle="Control de equipamiento de rescate, comunicaciones y vehículos"
+      actions={
+        <button
+          onClick={() => setShowModal(true)}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#D90429] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-red-700"
+        >
+          <Plus size={18} strokeWidth={2.5} /> Agregar Equipo
+        </button>
+      }
+    >
+      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+        {loading ? (
+          <p className="p-8 text-center text-sm font-bold text-neutral-500">
+            Cargando inventario...
+          </p>
+        ) : items.length === 0 ? (
+          <div className="p-12 text-center">
+            <Package size={44} strokeWidth={2} className="mx-auto mb-3 text-neutral-300" />
+            <p className="text-sm font-bold text-neutral-500">
+              No hay equipos registrados en el inventario.
+            </p>
           </div>
-
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            {loading ? (
-              <p className="p-8 text-center text-sm text-gray-500">
-                Cargando inventario...
-              </p>
-            ) : items.length === 0 ? (
-              <p className="p-8 text-center text-sm text-gray-500">
-                No hay equipos registrados en el inventario.
-              </p>
-            ) : (
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="px-6 py-3">Equipo</th>
-                    <th className="px-6 py-3">Categoría</th>
-                    <th className="px-6 py-3">Cantidad</th>
-                    <th className="px-6 py-3">Estado</th>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-neutral-200 bg-neutral-50 text-[11px] font-black uppercase tracking-wider text-neutral-500">
+                <tr>
+                  <th className="px-6 py-4">Equipo</th>
+                  <th className="px-6 py-4">Categoría</th>
+                  <th className="px-6 py-4">Cantidad</th>
+                  <th className="px-6 py-4">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {items.map((item) => (
+                  <tr key={item.id} className="hover:bg-neutral-50">
+                    <td className="px-6 py-4 font-bold text-neutral-900">
+                      {item.nombre}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-neutral-600">
+                      {item.categoria}
+                    </td>
+                    <td className="px-6 py-4 font-black">{item.cantidad}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-black uppercase ${getBadgeClass(
+                          item.estado
+                        )}`}
+                      >
+                        {item.estado}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {items.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-semibold text-gray-900">
-                        {item.nombre}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {item.categoria}
-                      </td>
-                      <td className="px-6 py-4 font-medium">{item.cantidad}</td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getBadgeClass(
-                            item.estado
-                          )}`}
-                        >
-                          {item.estado}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        </main>
+        )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-black uppercase text-neutral-950">
                 Agregar Equipo
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-700"
+                className="text-neutral-400 hover:text-neutral-800"
               >
-                <X size={20} />
+                <X size={20} strokeWidth={2.5} />
               </button>
             </div>
 
             <form onSubmit={handleAgregar} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
                   Nombre del Equipo
                 </label>
                 <input
@@ -170,13 +161,13 @@ export default function Inventario() {
                     setNuevoItem({ ...nuevoItem, nombre: e.target.value })
                   }
                   placeholder="Ej. Radio VHF Motorola"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-neutral-300 px-3.5 py-2.5 text-sm font-semibold"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
                     Categoría
                   </label>
                   <select
@@ -184,7 +175,7 @@ export default function Inventario() {
                     onChange={(e) =>
                       setNuevoItem({ ...nuevoItem, categoria: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-sm font-semibold"
                   >
                     <option>Rescate</option>
                     <option>Comunicaciones</option>
@@ -194,7 +185,7 @@ export default function Inventario() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
                     Cantidad
                   </label>
                   <input
@@ -205,13 +196,13 @@ export default function Inventario() {
                     onChange={(e) =>
                       setNuevoItem({ ...nuevoItem, cantidad: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm font-semibold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
                   Estado
                 </label>
                 <select
@@ -219,7 +210,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     setNuevoItem({ ...nuevoItem, estado: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-sm font-semibold"
                 >
                   <option>Operativo</option>
                   <option>En mantención</option>
@@ -231,14 +222,14 @@ export default function Inventario() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                  className="rounded-xl border border-neutral-300 px-4 py-2.5 text-xs font-black uppercase text-neutral-700 hover:bg-neutral-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-xl bg-[#D90429] px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {saving ? 'Guardando...' : 'Guardar'}
                 </button>
@@ -247,6 +238,6 @@ export default function Inventario() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

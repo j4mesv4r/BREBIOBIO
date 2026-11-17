@@ -12,38 +12,40 @@ import FichaVoluntarioPublica from './pages/public/FichaVoluntarioPublica';
 import Login from './pages/auth/Login';
 import RegistroPostulante from './pages/auth/RegistroPostulante';
 
-import PanelVoluntario from './pages/dashboard/PanelVoluntario';
 import CentralMando from './pages/dashboard/CentralMando';
 import Inventario from './pages/dashboard/Inventario';
 import GestionDirectorio from './pages/dashboard/GestionDirectorio';
 import ConfiguracionSitio from './pages/dashboard/ConfiguracionSitio';
-import MiPerfil from './pages/dashboard/MiPerfil'; // Asegúrate de importar MiPerfil
+import MiPerfil from './pages/dashboard/MiPerfil';
 
-const RutaProtegida = ({ children, rolesPermitidos }) => {
+const RutaProtegida = ({ children, rolesPermitidos, moduloRequerido }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-600">
+      <div className="flex min-h-screen items-center justify-center bg-neutral-100 text-xs font-black uppercase tracking-widest text-neutral-600">
         Cargando sesión...
       </div>
     );
   }
 
-  // 1. Si no está logueado, a Login
+  // 1. Si no está autenticado, redirige a Login
   if (!user) return <Navigate to="/login" replace />;
 
-  // 2. Lógica de validación dual (Rol de Sistema + Cargo en ONG)
-  if (rolesPermitidos) {
-    const rolSistema = profile?.rol?.toLowerCase() || '';
-    const cargoOng = profile?.cargo_ong?.toLowerCase() || '';
+  // 2. Validación por rol institucional o permiso granular activado por Superadmin
+  if (rolesPermitidos || moduloRequerido) {
+    const rolSistema = (profile?.rol || '').toLowerCase();
+    const cargoOng = (profile?.cargo_ong || '').toLowerCase();
+    const permisosModulos = profile?.permisos_modulos || {};
 
-    // Verifica si el array rolesPermitidos incluye su rol de sistema (ej: superadmin) 
-    // o su cargo en la ONG (ej: postulante, voluntario, director)
-    const tieneAcceso = rolesPermitidos.includes(rolSistema) || rolesPermitidos.includes(cargoOng);
+    const tieneRol =
+      rolesPermitidos &&
+      (rolesPermitidos.includes(rolSistema) || rolesPermitidos.includes(cargoOng));
 
-    if (!tieneAcceso) {
-      // Si no tiene acceso, lo mandamos a su perfil básico para que no quede en pantalla en blanco
+    const tieneModuloActivo =
+      moduloRequerido && Boolean(permisosModulos[moduloRequerido]);
+
+    if (!tieneRol && !tieneModuloActivo) {
       return <Navigate to="/mi-perfil" replace />;
     }
   }
@@ -75,7 +77,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroPostulante />} />
 
-          {/* Rutas Protegidas (Dashboard) */}
+          {/* Rutas Protegidas (Intranet Unificada) */}
           <Route
             path="/mi-perfil"
             element={
@@ -84,18 +86,14 @@ export default function App() {
               </RutaProtegida>
             }
           />
-          <Route
-            path="/panel"
-            element={
-              <RutaProtegida rolesPermitidos={['postulante', 'voluntario', 'director', 'superadmin']}>
-                <PanelVoluntario />
-              </RutaProtegida>
-            }
-          />
+          <Route path="/panel" element={<Navigate to="/mi-perfil" replace />} />
           <Route
             path="/central-mando"
             element={
-              <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
+              <RutaProtegida
+                rolesPermitidos={['director', 'superadmin']}
+                moduloRequerido="central_mando"
+              >
                 <CentralMando />
               </RutaProtegida>
             }
@@ -103,7 +101,10 @@ export default function App() {
           <Route
             path="/inventario"
             element={
-              <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
+              <RutaProtegida
+                rolesPermitidos={['director', 'superadmin']}
+                moduloRequerido="inventario"
+              >
                 <Inventario />
               </RutaProtegida>
             }
@@ -111,7 +112,10 @@ export default function App() {
           <Route
             path="/gestion"
             element={
-              <RutaProtegida rolesPermitidos={['director', 'superadmin']}>
+              <RutaProtegida
+                rolesPermitidos={['director', 'superadmin']}
+                moduloRequerido="gestion"
+              >
                 <GestionDirectorio />
               </RutaProtegida>
             }
