@@ -8,6 +8,7 @@ import SobreNosotros from './pages/public/SobreNosotros';
 import SolicitarApoyo from './pages/public/SolicitarApoyo';
 import Postular from './pages/public/Postular';
 import FichaVoluntarioPublica from './pages/public/FichaVoluntarioPublica';
+import OperativoInvitado from './pages/public/OperativoInvitado';
 
 import Login from './pages/auth/Login';
 import RegistroPostulante from './pages/auth/RegistroPostulante';
@@ -37,10 +38,8 @@ const RutaProtegida = ({
     );
   }
 
-  // 1. Si no está autenticado, redirige a Login
   if (!user) return <Navigate to="/login" replace />;
 
-  // 2. Validación por rol institucional, cargo operativo múltiple o módulo activado por Superadmin
   if (rolesPermitidos || cargosPermitidos || moduloRequerido) {
     const rolSistema = (profile?.rol || '').toLowerCase();
     const cargosUsuario = Array.isArray(profile?.cargos_operativos)
@@ -86,6 +85,9 @@ export default function App() {
           <Route path="/postular" element={<PublicLayout><Postular /></PublicLayout>} />
           <Route path="/voluntario/:rut" element={<PublicLayout><FichaVoluntarioPublica /></PublicLayout>} />
 
+          {/* Acceso Provisorio Multi-Agencia vía Enlace o QR */}
+          <Route path="/operativo-invitado/:codigo" element={<OperativoInvitado />} />
+
           {/* Autenticación */}
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroPostulante />} />
@@ -114,7 +116,7 @@ export default function App() {
             path="/central-mando"
             element={
               <RutaProtegida
-                rolesPermitidos={['director', 'superadmin']}
+                rolesPermitidos={['postulante', 'voluntario', 'director', 'superadmin']}
                 cargosPermitidos={['do', 'dos', 'jc', 'lem', 'prehospitalario']}
                 moduloRequerido="central_mando"
               >

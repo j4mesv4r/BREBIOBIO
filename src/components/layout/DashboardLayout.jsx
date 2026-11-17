@@ -49,15 +49,19 @@ export default function DashboardLayout({
     const esDirectivo = esSA || esDG;
     const esTesorero = cargos.includes('tesorero');
     const esSecretario = cargos.includes('secretario');
-    const esMandoOperativo = cargos.some((c) =>
-        ['do', 'dos', 'jc', 'lem', 'prehospitalario'].includes(c)
-    );
 
     const navItems = [
         {
             label: 'Mi Ficha y Credencial',
             to: '/mi-perfil',
             icon: User,
+            visible: true,
+            accent: 'from-[#F01436] to-[#A3001B]',
+        },
+        {
+            label: 'Central de Mando',
+            to: '/central-mando',
+            icon: MapPin,
             visible: true,
             accent: 'from-[#F01436] to-[#A3001B]',
         },
@@ -78,14 +82,6 @@ export default function DashboardLayout({
                 cargos.includes('do') ||
                 cargos.includes('lem') ||
                 Boolean(permisos.gestion),
-            accent: 'from-[#F01436] to-[#A3001B]',
-        },
-        {
-            label: 'Central de Mando',
-            to: '/central-mando',
-            icon: MapPin,
-            visible:
-                esDirectivo || esMandoOperativo || Boolean(permisos.central_mando),
             accent: 'from-[#F01436] to-[#A3001B]',
         },
         {
@@ -126,9 +122,6 @@ export default function DashboardLayout({
 
     return (
         <div className="flex min-h-screen bg-neutral-100 font-sans text-neutral-950">
-            {/* ===================================================================
-          DESKTOP: Riel lateral 3D que se expande al pasar el cursor (Hover)
-         =================================================================== */}
             <aside
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
@@ -140,7 +133,6 @@ export default function DashboardLayout({
                             : 'w-20 shadow-xl'
                         }`}
                 >
-                    {/* Emblema Institucional */}
                     <div className="flex h-20 items-center border-b border-neutral-800 px-4">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white p-1 shadow-[0_6px_15px_rgba(0,0,0,0.5)]">
                             <img
@@ -162,7 +154,6 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
-                    {/* Tarjeta de Identidad del Operador */}
                     <div className="border-b border-neutral-800 p-3.5">
                         <div className="flex items-start rounded-2xl border border-neutral-800 bg-neutral-900/90 p-2 shadow-inner">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-[#FFD25A] to-[#F2B632] text-[#0A0A0A] shadow-md">
@@ -187,7 +178,6 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
-                    {/* Módulos de Navegación con Iconos Gruesos 3D */}
                     <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
                         {navItems.map((item) => {
                             const Icon = item.icon;
@@ -228,7 +218,6 @@ export default function DashboardLayout({
                         })}
                     </nav>
 
-                    {/* Pie del Sidebar: Portal Público y Cerrar Sesión */}
                     <div className="space-y-2 border-t border-neutral-800 p-3">
                         <Link
                             to="/"
@@ -266,9 +255,6 @@ export default function DashboardLayout({
                 </div>
             </aside>
 
-            {/* ===================================================================
-          CONTENEDOR PRINCIPAL + MENÚ DESPLEGABLE CON FLECHA EN MÓVIL
-         =================================================================== */}
             <div className="flex min-w-0 flex-1 flex-col">
                 <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white shadow-sm">
                     <div className="flex items-center justify-between px-4 py-3.5 sm:px-8">
@@ -311,7 +297,6 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
-                    {/* Acordeón Desplegable Móvil */}
                     <div
                         className={`overflow-hidden border-t border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out lg:hidden ${mobileMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
                             }`}
