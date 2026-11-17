@@ -10,6 +10,13 @@ create table if not exists public.perfiles (
   estado_validacion text not null default 'pendiente'
     check (estado_validacion in ('pendiente', 'aprobado', 'rechazado')),
   telefono text,
+  codigo_credencial text,
+  foto_url text,
+  funcion text,
+  tipo_sangre text,
+  alergias text,
+  fecha_emision_credencial date,
+  fecha_vigencia_credencial date,
   activo boolean not null default true,
   created_at timestamptz not null default now()
 );

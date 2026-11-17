@@ -22,9 +22,8 @@ description: >-
 - Usar siempre el emblema circular oficial ubicado en `public/logo-bre.png` con `object-contain`.
 - Prohibido redibujar, reinterpretar, deformar, cambiar colores, alterar proporciones o sustituir por iconos genéricos.
 
-## Credenciales, Privacidad y Fotografía
-- Credenciales: contemplar fotografía, nombre, identificador institucional, función/especialidad, emisión/vigencia y QR verificable.
-- **Privacidad estricta**: nunca exponer RUT, antecedentes médicos ni datos personales en consultas públicas del QR (`/voluntario/:id`).
+## Credenciales Oficiales y Fotografía
+- La ficha pública (`/voluntario/:rut`) emula la Credencial Oficial para verificación en terreno por autoridades (SENAPRED, emergencias): muestra fotografía, nombre, RUT, ID institucional, función/área, especialidades aprobadas, tipo de sangre, alergias, fechas de emisión/vigencia y sello de estado (`VOLUNTARIO ACTIVO`).
 - **Fotografía**: priorizar material real propio en `src/assets/terreno/` y `public/directorio/`. Nunca presentar fotografías genéricas de terceros como operaciones de BRE BÍO-BÍO.
 
 ## Tipografía y Reglas Estrictas
