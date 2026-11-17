@@ -10,8 +10,21 @@ import {
     LogOut,
     Shield,
     ChevronDown,
+    Wallet,
+    GraduationCap,
+    History,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+
+const ETIQUETAS_CARGOS = {
+    secretario: 'Secretario',
+    tesorero: 'Tesorero',
+    do: 'Director Operativo (DO)',
+    dos: 'Director Op. Suplente (DOs)',
+    jc: 'Jefe de Cuadrilla (JC)',
+    lem: 'Líder Equipo Médico (LEM)',
+    prehospitalario: 'Prehospitalario',
+};
 
 export default function DashboardLayout({
     children,
@@ -26,44 +39,85 @@ export default function DashboardLayout({
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const rol = (profile?.rol || 'postulante').toLowerCase();
-    const esSuperadmin = rol === 'superadmin';
-    const esDirector = rol === 'director' || esSuperadmin;
+    const cargos = Array.isArray(profile?.cargos_operativos)
+        ? profile.cargos_operativos.map((c) => c.toLowerCase())
+        : [];
     const permisos = profile?.permisos_modulos || {};
+
+    const esSA = rol === 'superadmin';
+    const esDG = rol === 'director';
+    const esDirectivo = esSA || esDG;
+    const esTesorero = cargos.includes('tesorero');
+    const esSecretario = cargos.includes('secretario');
+    const esMandoOperativo = cargos.some((c) =>
+        ['do', 'dos', 'jc', 'lem', 'prehospitalario'].includes(c)
+    );
 
     const navItems = [
         {
-            label: 'Mi Ficha y Certificados',
+            label: 'Mi Ficha y Credencial',
             to: '/mi-perfil',
             icon: User,
             visible: true,
             accent: 'from-[#F01436] to-[#A3001B]',
         },
         {
+            label: 'Cursos y SENAPRED',
+            to: '/cursos',
+            icon: GraduationCap,
+            visible: rol !== 'postulante',
+            accent: 'from-[#F01436] to-[#A3001B]',
+        },
+        {
             label: 'Gestión Directorio',
             to: '/gestion',
             icon: Users,
-            visible: esDirector || Boolean(permisos.gestion),
+            visible:
+                esDirectivo ||
+                esSecretario ||
+                cargos.includes('do') ||
+                cargos.includes('lem') ||
+                Boolean(permisos.gestion),
             accent: 'from-[#F01436] to-[#A3001B]',
         },
         {
             label: 'Central de Mando',
             to: '/central-mando',
             icon: MapPin,
-            visible: esDirector || Boolean(permisos.central_mando),
+            visible:
+                esDirectivo || esMandoOperativo || Boolean(permisos.central_mando),
+            accent: 'from-[#F01436] to-[#A3001B]',
+        },
+        {
+            label: 'Tesorería y Respaldos',
+            to: '/tesoreria',
+            icon: Wallet,
+            visible: esDirectivo || esTesorero,
             accent: 'from-[#F01436] to-[#A3001B]',
         },
         {
             label: 'Inventario y Logística',
             to: '/inventario',
             icon: Package,
-            visible: esDirector || Boolean(permisos.inventario),
+            visible:
+                esDirectivo ||
+                cargos.includes('do') ||
+                cargos.includes('dos') ||
+                Boolean(permisos.inventario),
             accent: 'from-[#F01436] to-[#A3001B]',
+        },
+        {
+            label: 'Auditoría Sistema',
+            to: '/auditoria',
+            icon: History,
+            visible: esSA,
+            accent: 'from-[#FFD25A] to-[#D99B16]',
         },
         {
             label: 'Configuración Sitio',
             to: '/configuracion',
             icon: Settings,
-            visible: esSuperadmin,
+            visible: esSA,
             accent: 'from-[#FFD25A] to-[#D99B16]',
         },
     ].filter((item) => item.visible);
@@ -82,7 +136,7 @@ export default function DashboardLayout({
             >
                 <div
                     className={`fixed inset-y-0 left-0 flex flex-col border-r border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out ${hovered
-                            ? 'w-72 shadow-[16px_0_45px_rgba(0,0,0,0.55)]'
+                            ? 'w-76 shadow-[16px_0_45px_rgba(0,0,0,0.55)]'
                             : 'w-20 shadow-xl'
                         }`}
                 >
@@ -96,7 +150,7 @@ export default function DashboardLayout({
                             />
                         </div>
                         <div
-                            className={`ml-3.5 overflow-hidden whitespace-nowrap transition-all duration-300 ${hovered ? 'w-48 opacity-100' : 'w-0 opacity-0'
+                            className={`ml-3.5 overflow-hidden whitespace-nowrap transition-all duration-300 ${hovered ? 'w-52 opacity-100' : 'w-0 opacity-0'
                                 }`}
                         >
                             <p className="text-sm font-black uppercase tracking-wider text-white">
@@ -110,12 +164,12 @@ export default function DashboardLayout({
 
                     {/* Tarjeta de Identidad del Operador */}
                     <div className="border-b border-neutral-800 p-3.5">
-                        <div className="flex items-center rounded-2xl border border-neutral-800 bg-neutral-900/90 p-2 shadow-inner">
+                        <div className="flex items-start rounded-2xl border border-neutral-800 bg-neutral-900/90 p-2 shadow-inner">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-[#FFD25A] to-[#F2B632] text-[#0A0A0A] shadow-md">
                                 <Shield size={19} strokeWidth={2.6} />
                             </div>
                             <div
-                                className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-300 ${hovered ? 'w-48 opacity-100' : 'w-0 opacity-0'
+                                className={`ml-3 overflow-hidden transition-all duration-300 ${hovered ? 'w-52 opacity-100' : 'w-0 opacity-0'
                                     }`}
                             >
                                 <p className="truncate text-xs font-black text-white">
@@ -124,12 +178,17 @@ export default function DashboardLayout({
                                 <p className="text-[10px] font-black uppercase tracking-widest text-[#F2B632]">
                                     {rol}
                                 </p>
+                                {cargos.length > 0 && (
+                                    <p className="mt-0.5 truncate text-[10px] font-bold text-neutral-400">
+                                        {cargos.map((c) => ETIQUETAS_CARGOS[c] || c).join(' · ')}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
 
                     {/* Módulos de Navegación con Iconos Gruesos 3D */}
-                    <nav className="flex-1 space-y-2.5 overflow-y-auto px-3 py-5">
+                    <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
                         {navItems.map((item) => {
                             const Icon = item.icon;
                             const active = isActive(item.to);
@@ -156,7 +215,7 @@ export default function DashboardLayout({
                                     </div>
 
                                     <span
-                                        className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-48 opacity-100' : 'w-0 opacity-0'
+                                        className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-52 opacity-100' : 'w-0 opacity-0'
                                             } ${active
                                                 ? 'text-white'
                                                 : 'text-neutral-300 group-hover:text-white'
@@ -180,7 +239,7 @@ export default function DashboardLayout({
                                 <Home size={20} strokeWidth={2.5} />
                             </div>
                             <span
-                                className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-48 opacity-100' : 'w-0 opacity-0'
+                                className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-52 opacity-100' : 'w-0 opacity-0'
                                     }`}
                             >
                                 Portal Público
@@ -197,7 +256,7 @@ export default function DashboardLayout({
                                 <LogOut size={20} strokeWidth={2.5} />
                             </div>
                             <span
-                                className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-48 opacity-100' : 'w-0 opacity-0'
+                                className={`ml-3.5 overflow-hidden whitespace-nowrap text-xs font-black uppercase tracking-wider transition-all duration-300 ${hovered ? 'w-52 opacity-100' : 'w-0 opacity-0'
                                     }`}
                             >
                                 Cerrar Sesión
@@ -211,7 +270,6 @@ export default function DashboardLayout({
           CONTENEDOR PRINCIPAL + MENÚ DESPLEGABLE CON FLECHA EN MÓVIL
          =================================================================== */}
             <div className="flex min-w-0 flex-1 flex-col">
-                {/* Barra Superior Unificada */}
                 <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white shadow-sm">
                     <div className="flex items-center justify-between px-4 py-3.5 sm:px-8">
                         <div className="flex items-center gap-3">
@@ -237,7 +295,6 @@ export default function DashboardLayout({
                         <div className="flex items-center gap-2.5">
                             {actions && <div className="flex items-center gap-2">{actions}</div>}
 
-                            {/* Botón con flecha hacia abajo para desplegar menú en celular */}
                             <button
                                 type="button"
                                 onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -254,19 +311,26 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
-                    {/* Acordeón Desplegable Móvil (se abre/cierra con la flecha hacia abajo) */}
+                    {/* Acordeón Desplegable Móvil */}
                     <div
-                        className={`overflow-hidden border-t border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out lg:hidden ${mobileMenuOpen ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'
+                        className={`overflow-hidden border-t border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out lg:hidden ${mobileMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
                             }`}
                     >
                         <div className="space-y-2 p-4">
-                            <div className="mb-3 flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
-                                <span className="text-xs font-black text-white">
-                                    {profile?.nombre_completo || 'Usuario BRE'}
-                                </span>
-                                <span className="rounded bg-[#F2B632] px-2 py-0.5 text-[10px] font-black uppercase text-black">
-                                    {rol}
-                                </span>
+                            <div className="mb-3 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-black text-white">
+                                        {profile?.nombre_completo || 'Usuario BRE'}
+                                    </span>
+                                    <span className="rounded bg-[#F2B632] px-2 py-0.5 text-[10px] font-black uppercase text-black">
+                                        {rol}
+                                    </span>
+                                </div>
+                                {cargos.length > 0 && (
+                                    <p className="mt-1 text-[10px] font-bold text-neutral-400">
+                                        {cargos.map((c) => ETIQUETAS_CARGOS[c] || c).join(' · ')}
+                                    </p>
+                                )}
                             </div>
 
                             {navItems.map((item) => {
@@ -299,7 +363,7 @@ export default function DashboardLayout({
                                 <button
                                     type="button"
                                     onClick={signOut}
-                                    className="flex items-center justify-center gap-2 rounded-xl bg-red-950/60 border border-red-800/50 py-2.5 text-xs font-black uppercase text-red-300"
+                                    className="flex items-center justify-center gap-2 rounded-xl border border-red-800/50 bg-red-950/60 py-2.5 text-xs font-black uppercase text-red-300"
                                 >
                                     <LogOut size={16} strokeWidth={2.5} /> Salir
                                 </button>
@@ -308,7 +372,6 @@ export default function DashboardLayout({
                     </div>
                 </header>
 
-                {/* Contenido Principal del Módulo */}
                 <main
                     className={
                         fullHeight
