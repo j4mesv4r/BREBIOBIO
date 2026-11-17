@@ -24,14 +24,13 @@ import {
 } from 'lucide-react';
 
 export default function MiPerfil() {
-    const { user, signOut, setProfile } = useAuth();
+    const { user, profile: contextProfile, signOut, setProfile } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [perfil, setPerfil] = useState(null);
+    const [perfil, setPerfil] = useState(contextProfile || null);
     const [certificados, setCertificados] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
 
-    // Estado para edición de datos básicos
     const [editando, setEditando] = useState(false);
     const [guardandoDatos, setGuardandoDatos] = useState(false);
     const [formDatos, setFormDatos] = useState({
@@ -43,45 +42,53 @@ export default function MiPerfil() {
 
     useEffect(() => {
         cargarDatosPerfil();
-    }, []);
+    }, [user]);
 
     const cargarDatosPerfil = async () => {
         try {
             setLoading(true);
-            const {
-                data: { user: currentUser },
-            } = await supabase.auth.getUser();
+            setMensaje({ tipo: '', texto: '' });
 
-            if (currentUser) {
-                const { data: perfilData, error: perfilError } = await supabase
-                    .from('perfiles')
-                    .select('*')
-                    .eq('id', currentUser.id)
-                    .single();
+            const currentUser = user || (await supabase.auth.getUser()).data?.user;
+            if (!currentUser) {
+                setLoading(false);
+                return;
+            }
 
-                if (perfilError) throw perfilError;
-                setPerfil(perfilData);
+            const { data: perfilData, error: perfilError } = await supabase
+                .from('perfiles')
+                .select('*')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+
+            if (perfilError) throw perfilError;
+
+            const perfilActivo = perfilData || contextProfile;
+            if (perfilActivo) {
+                setPerfil(perfilActivo);
+                if (setProfile) setProfile(perfilActivo);
                 setFormDatos({
-                    nombre_completo: perfilData.nombre_completo || '',
-                    rut: perfilData.rut || '',
-                    telefono: perfilData.telefono || '',
-                    especialidad: perfilData.especialidad || '',
+                    nombre_completo: perfilActivo.nombre_completo || '',
+                    rut: perfilActivo.rut || '',
+                    telefono: perfilActivo.telefono || '',
+                    especialidad: perfilActivo.especialidad || '',
                 });
+            }
 
-                const { data: certData, error: certError } = await supabase
-                    .from('certificados')
-                    .select('*')
-                    .eq('perfil_id', currentUser.id)
-                    .order('creado_en', { ascending: false });
+            const { data: certData, error: certError } = await supabase
+                .from('certificados')
+                .select('*')
+                .eq('perfil_id', currentUser.id)
+                .order('creado_en', { ascending: false });
 
-                if (certError) throw certError;
-                setCertificados(certData || []);
+            if (!certError && certData) {
+                setCertificados(certData);
             }
         } catch (error) {
             console.error('Error al cargar perfil:', error.message);
             setMensaje({
                 tipo: 'error',
-                texto: 'No se pudieron cargar los datos del perfil.',
+                texto: 'Error de permisos o conexión: ' + error.message,
             });
         } finally {
             setLoading(false);
@@ -118,7 +125,6 @@ export default function MiPerfil() {
                 texto: 'Datos operativos actualizados correctamente.',
             });
         } catch (error) {
-            console.error('Error al actualizar datos:', error.message);
             setMensaje({
                 tipo: 'error',
                 texto: error.message || 'No se pudieron guardar los cambios.',
@@ -141,8 +147,7 @@ export default function MiPerfil() {
             setMensaje({ tipo: '', texto: '' });
 
             const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
-            const filePath = `${perfil.id}/${fileName}`;
+            const filePath = `${perfil.id}/${Date.now()}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('certificados')
@@ -151,7 +156,7 @@ export default function MiPerfil() {
             if (uploadError) {
                 if (uploadError.message.includes('Bucket not found')) {
                     throw new Error(
-                        "El bucket 'certificados' no existe en Storage. Por favor créalo en Supabase."
+                        "El bucket 'certificados' no existe en Storage. Créalo en Supabase."
                     );
                 }
                 throw uploadError;
@@ -180,7 +185,6 @@ export default function MiPerfil() {
             e.target.reset();
             cargarDatosPerfil();
         } catch (error) {
-            console.error('Error al subir:', error.message);
             setMensaje({
                 tipo: 'error',
                 texto: error.message || 'Error al subir el certificado.',
@@ -249,71 +253,76 @@ export default function MiPerfil() {
         );
     }
 
-    const esDirectivo =
-        perfil?.rol === 'director' || perfil?.rol === 'superadmin';
+    const rolActual = (perfil?.rol || '').toLowerCase();
+    const esDirectivo = rolActual === 'director' || rolActual === 'superadmin';
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-10">
             <div className="max-w-6xl mx-auto space-y-8">
-                {/* Cabecera del Perfil */}
+                {/* Cabecera del Perfil sin superposición */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="h-32 bg-black border-b-4 border-red-600 flex items-start justify-end p-4 gap-2">
-                        <Link
-                            to="/"
-                            className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                            <Home size={14} /> Portal Público
-                        </Link>
-                        <button
-                            onClick={signOut}
-                            className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                            <LogOut size={14} /> Salir
-                        </button>
+                    <div className="h-24 bg-black border-b-4 border-red-600 flex items-center justify-between px-6">
+                        <span className="text-xs font-black uppercase tracking-widest text-amber-400">
+                            Intranet O.N.G. BRE BÍO-BÍO
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <Link
+                                to="/"
+                                className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                                <Home size={14} /> Portal Público
+                            </Link>
+                            <button
+                                onClick={signOut}
+                                className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                                <LogOut size={14} /> Salir
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="px-8 pb-8 relative">
-                        <div className="absolute -top-16 left-8">
-                            <div className="w-32 h-32 bg-white rounded-full border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
-                                {perfil?.foto_url ? (
-                                    <img
-                                        src={perfil.foto_url}
-                                        alt={perfil.nombre_completo}
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <User size={64} className="text-gray-300" />
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mt-20 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-                            <div>
-                                <h1 className="text-3xl font-black text-gray-900">
-                                    {perfil?.nombre_completo || 'Usuario BRE Biobío'}
-                                </h1>
-                                <div className="flex flex-wrap items-center gap-3 mt-2">
-                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-red-100 text-red-700">
-                                        <Shield size={14} />
-                                        {perfil?.funcion || perfil?.rol || 'Voluntario'}
-                                    </span>
-                                    {user?.email && (
-                                        <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
-                                            <Mail size={15} />
-                                            {user.email}
-                                        </span>
+                    <div className="p-6 sm:p-8">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                            <div className="flex items-center gap-5">
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 bg-gray-100 rounded-2xl border-2 border-gray-200 shadow-sm flex items-center justify-center overflow-hidden">
+                                    {perfil?.foto_url ? (
+                                        <img
+                                            src={perfil.foto_url}
+                                            alt={perfil.nombre_completo}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <User size={44} className="text-gray-400" />
                                     )}
+                                </div>
+
+                                <div>
+                                    <h1 className="text-2xl sm:text-3xl font-black text-gray-900">
+                                        {perfil?.nombre_completo || 'Usuario BRE Biobío'}
+                                    </h1>
+                                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-red-100 text-red-700">
+                                            <Shield size={14} />
+                                            {perfil?.funcion || perfil?.cargo_ong || perfil?.rol || 'Voluntario'}
+                                        </span>
+                                        {user?.email && (
+                                            <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                                                <Mail size={15} />
+                                                {user.email}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            {perfil?.rol === 'superadmin' && (
-                                <div className="bg-black text-amber-400 border border-amber-400/40 text-xs font-black px-3.5 py-2 rounded-lg uppercase tracking-wider self-start">
+                            {rolActual === 'superadmin' && (
+                                <div className="bg-black text-amber-400 border border-amber-400/40 text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider self-start sm:self-center">
                                     Acceso Superadmin
                                 </div>
                             )}
                         </div>
 
-                        {/* Accesos Rápidos de Administración (Director / Superadmin) */}
+                        {/* Accesos Rápidos de Administración */}
                         {esDirectivo && (
                             <div className="mt-6 pt-6 border-t border-gray-100 flex flex-wrap gap-3">
                                 <Link
@@ -334,7 +343,7 @@ export default function MiPerfil() {
                                 >
                                     <Package size={16} /> Inventario
                                 </Link>
-                                {perfil?.rol === 'superadmin' && (
+                                {rolActual === 'superadmin' && (
                                     <Link
                                         to="/configuracion"
                                         className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-500 text-black text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-colors"
