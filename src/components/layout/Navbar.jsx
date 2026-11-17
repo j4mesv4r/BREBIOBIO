@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldAlert, Menu, X, ChevronRight, UserCheck } from 'lucide-react';
+import { Menu, X, UserCheck, UserPlus } from 'lucide-react';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -10,100 +10,78 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Inicio', path: '/' },
-    { name: 'Institución y Estatutos', path: '/nosotros' },
-    { name: 'Solicitar Apoyo', path: '/apoyo' },
-    { name: 'Postulación', path: '/postular' },
+    { name: 'Institución', path: '/nosotros' },
+    { name: 'Apoyo', path: '/apoyo' },
+    { name: 'Postular', path: '/postular' },
   ];
 
   const isActive = (path) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-50 border-b-4 border-[#C8202F] bg-[#17191D] shadow-xl shadow-black/30">
-      {/* Franja Superior de Respaldo Legal */}
-      <div className="hidden border-b border-neutral-800 bg-black/40 md:block">
-        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs font-semibold tracking-wide text-neutral-300 sm:px-6 lg:px-8">
-          <span>O.N.G. BRE BIO BIO · Personalidad Jurídica Ley N° 20.500</span>
-          <span className="text-[#F2B632]">
-            Región del Biobío · Despliegue Nacional
-          </span>
-        </div>
-      </div>
-
-      {/* Navegación Principal */}
+    <header className="sticky top-0 z-50 bg-[#C8202F] text-white shadow-xl border-b-4 border-[#F2B632]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-between gap-4">
+
           {/* Identidad Oficial */}
-          <Link to="/" className="flex shrink-0 items-center gap-3.5">
-            <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-neutral-800 bg-white shadow-md">
+          <Link to="/" className="flex shrink-0 items-center gap-3.5 group">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-md">
               <img
                 src="/logo-bre.png"
                 alt="Escudo Oficial O.N.G. BRE BIO BIO"
                 className="h-full w-full object-contain"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }}
               />
-              <div className="hidden h-full w-full flex-col items-center justify-center bg-white text-[11px] font-black leading-none text-black">
-                <span>ONG</span>
-                <span className="text-red-600">BRE</span>
-              </div>
             </div>
 
             <div className="flex flex-col">
               <span className="text-lg font-black uppercase leading-none tracking-tight text-white sm:text-xl">
-                ONG BRE <span className="text-red-600">BIO BIO</span>
+                ONG BRE <span className="text-[#F2B632]">BIO BIO</span>
               </span>
-              <span className="mt-1 text-[11px] font-extrabold uppercase leading-none tracking-[0.16em] text-amber-400">
-                Búsqueda · Rescate · Emergencia
+              <span className="mt-1 text-[10px] font-black uppercase leading-none tracking-[0.16em] text-neutral-100">
+                Búsqueda · Rescate · Emergencia[cite: 16]
               </span>
             </div>
           </Link>
 
-          {/* Enlaces Desktop */}
-          <nav className="hidden items-center gap-7 lg:flex">
+          {/* Enlaces Desktop (Letras blancas, negrita y contenedor redondeado) */}
+          <nav className="hidden items-center gap-2 lg:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
                 to={link.path}
-                className={`border-b-2 py-2 text-xs font-extrabold uppercase tracking-wider transition-colors ${
-                  isActive(link.path)
-                    ? 'border-amber-400 text-white'
-                    : 'border-transparent text-neutral-300 hover:border-neutral-600 hover:text-white'
-                }`}
+                className={`rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all ${isActive(link.path)
+                    ? 'bg-black text-[#F2B632] shadow-inner border border-[#F2B632]/50'
+                    : 'text-white hover:bg-black/20'
+                  }`}
               >
                 {link.name}
               </Link>
             ))}
           </nav>
 
-          {/* Botones de Acción */}
+          {/* Botones de Acción (Amarillo táctico y negro) */}
           <div className="hidden shrink-0 items-center gap-3 lg:flex">
             {user ? (
               <Link
                 to="/mi-perfil"
-                className="inline-flex items-center gap-2 rounded border-2 border-neutral-700 bg-neutral-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-neutral-800"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#F2B632] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-black shadow-md transition-all hover:bg-[#e0a628] border-2 border-black"
               >
-                <UserCheck size={16} className="text-amber-400" />
-                <span>
-                  {profile?.nombre_completo?.split(' ')[0] || 'Mi Panel'}
-                </span>
-                <ChevronRight size={15} className="text-neutral-400" />
+                <UserCheck size={18} strokeWidth={2.5} />
+                <span>{profile?.nombre_completo?.split(' ')[0] || 'Mi Panel'}</span>
               </Link>
             ) : (
               <>
                 <Link
                   to="/login"
-                  className="rounded border-2 border-neutral-700 px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white transition-colors hover:border-white"
+                  className="rounded-2xl bg-black/30 hover:bg-black/50 border border-white/40 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white transition-all shadow-sm"
                 >
-                  Intranet
+                  Ingresar
                 </Link>
                 <Link
-                  to="/apoyo"
-                  className="inline-flex items-center gap-2 rounded bg-red-600 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-red-950/60 transition-colors hover:bg-red-700"
+                  to="/registro"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#F2B632] hover:bg-[#e0a628] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-black shadow-md border-2 border-black transition-all"
                 >
-                  <ShieldAlert size={16} />
-                  <span>Solicitar Apoyo</span>
+                  <UserPlus size={18} strokeWidth={2.5} />
+                  <span>Registrarse</span>
                 </Link>
               </>
             )}
@@ -113,54 +91,53 @@ export default function Navbar() {
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Abrir menú"
-            className="rounded p-2 text-white transition-colors hover:bg-neutral-800 lg:hidden"
+            className="rounded-xl p-2 text-white transition-colors hover:bg-black/20 lg:hidden"
           >
-            {mobileMenuOpen ? <X size={26} /> : <Menu size={26} />}
+            {mobileMenuOpen ? <X size={26} strokeWidth={2.5} /> : <Menu size={26} strokeWidth={2.5} />}
           </button>
         </div>
       </div>
 
       {/* Menú Desplegable Móvil */}
       {mobileMenuOpen && (
-        <div className="space-y-2 border-t border-neutral-800 bg-neutral-950 px-4 pb-6 pt-3 lg:hidden">
+        <div className="space-y-2 border-t border-white/20 bg-[#a61924] px-4 pb-6 pt-3 lg:hidden shadow-2xl">
           {navLinks.map((link) => (
             <Link
               key={link.path}
               to={link.path}
               onClick={() => setMobileMenuOpen(false)}
-              className={`block rounded px-4 py-3 text-xs font-black uppercase tracking-wider ${
-                isActive(link.path)
-                  ? 'bg-red-600 text-white'
-                  : 'text-neutral-200 hover:bg-neutral-900'
-              }`}
+              className={`block rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider ${isActive(link.path)
+                  ? 'bg-black text-[#F2B632]'
+                  : 'text-white hover:bg-black/20'
+                }`}
             >
               {link.name}
             </Link>
           ))}
-          <div className="grid grid-cols-1 gap-2.5 border-t border-neutral-800 pt-3">
+          <div className="grid grid-cols-1 gap-2.5 border-t border-white/20 pt-3">
             {user ? (
               <Link
                 to="/mi-perfil"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex w-full items-center justify-center gap-2 rounded bg-amber-400 py-3 text-xs font-black uppercase tracking-wider text-black"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#F2B632] py-3 text-xs font-black uppercase tracking-wider text-black border-2 border-black"
               >
-                <UserCheck size={16} /> Ir a Mi Panel
+                <UserCheck size={18} strokeWidth={2.5} /> Mi Panel
               </Link>
             ) : (
               <>
                 <Link
                   to="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full rounded border-2 border-neutral-700 py-3 text-center text-xs font-extrabold uppercase tracking-wider text-white"
+                  className="w-full rounded-2xl bg-black/40 py-3 text-center text-xs font-black uppercase tracking-wider text-white"
                 >
-                  Acceso Intranet
+                  Ingresar
                 </Link>
                 <Link
-                  to="/apoyo"
+                  to="/registro"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex w-full items-center justify-center gap-2 rounded bg-red-600 py-3 text-xs font-black uppercase tracking-wider text-white"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#F2B632] py-3 text-xs font-black uppercase tracking-wider text-black border-2 border-black"
                 >
-                  <ShieldAlert size={16} /> Solicitar Apoyo Técnico
+                  <UserPlus size={18} strokeWidth={2.5} /> Registrarse
                 </Link>
               </>
             )}

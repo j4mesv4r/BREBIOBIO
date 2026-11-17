@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  MapPin,
-  Globe,
-  ShieldCheck,
-  Instagram,
-  Facebook,
-  Video,
-} from 'lucide-react';
+import { MapPin, Globe, ShieldCheck, Instagram, Facebook, Video } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export default function Footer() {
@@ -25,7 +18,7 @@ export default function Footer() {
         .from('configuracion_sitio')
         .select('instagram_url, facebook_url, tiktok_url')
         .eq('id', 1)
-        .single();
+        .maybeSingle();
 
       if (!error && data && mounted) {
         setRedes({
@@ -47,12 +40,14 @@ export default function Footer() {
   );
 
   return (
-    <footer className="border-t-4 border-[#F2B632] bg-[#17191D] text-white">
+    <footer className="bg-[#C8202F] text-white border-t-4 border-[#F2B632]">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-4">
+
+          {/* Columna 1: Identidad */}
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-neutral-700 bg-white">
+            <div className="flex items-center gap-3.5">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-white bg-white shadow-md">
                 <img
                   src="/logo-bre.png"
                   alt="O.N.G. BRE BIO BIO"
@@ -61,110 +56,96 @@ export default function Footer() {
               </div>
               <div>
                 <h4 className="text-base font-black uppercase tracking-tight text-white">
-                  ONG BRE <span className="text-[#DC2626]">BIO BIO</span>
+                  ONG BRE <span className="text-[#F2B632]">BIO BIO</span>
                 </h4>
-                <p className="text-[11px] font-extrabold uppercase tracking-widest text-[#FACC15]">
+                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-100">
                   Servicio y Vocación
                 </p>
               </div>
             </div>
-            <p className="text-sm font-semibold leading-relaxed text-neutral-300">
-              Organización No Gubernamental de Prevención, Desarrollo y
-              Protección Civil. Preparados para responder, comprometidos con la
-              vida.
+            <p className="text-sm font-bold leading-relaxed text-neutral-100">
+              Organización No Gubernamental de Prevención, Desarrollo y Protección Civil. Preparados para responder, comprometidos con la vida[cite: 16].
             </p>
           </div>
 
+          {/* Columna 2: Navegación */}
           <div>
-            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#FACC15]">
+            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#F2B632]">
               Navegación
             </h5>
-            <ul className="space-y-2.5 text-sm font-bold text-neutral-300">
+            <ul className="space-y-2.5 text-sm font-bold text-neutral-100">
               <li>
-                <Link to="/" className="transition-colors hover:text-white">
+                <Link to="/" className="transition-colors hover:text-black">
                   Inicio
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/nosotros"
-                  className="transition-colors hover:text-white"
-                >
-                  Institución y Estatutos
+                <Link to="/nosotros" className="transition-colors hover:text-black">
+                  Institución
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/apoyo"
-                  className="transition-colors hover:text-white"
-                >
-                  Solicitar Apoyo Técnico
+                <Link to="/apoyo" className="transition-colors hover:text-black">
+                  Apoyo
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/postular"
-                  className="transition-colors hover:text-white"
-                >
-                  Postular al Voluntariado
+                <Link to="/postular" className="transition-colors hover:text-black">
+                  Postular
                 </Link>
               </li>
             </ul>
           </div>
 
+          {/* Columna 3: Intranet */}
           <div>
-            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#FACC15]">
+            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#F2B632]">
               Plataforma Interna
             </h5>
-            <ul className="space-y-2.5 text-sm font-bold text-neutral-300">
+            <ul className="space-y-2.5 text-sm font-bold text-neutral-100">
               <li>
-                <Link
-                  to="/login"
-                  className="transition-colors hover:text-white"
-                >
-                  Intranet de Miembros
+                <Link to="/login" className="transition-colors hover:text-black">
+                  Ingresar
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/registro"
-                  className="transition-colors hover:text-white"
-                >
-                  Registro de Postulantes
+                <Link to="/registro" className="transition-colors hover:text-black">
+                  Registrarse
                 </Link>
               </li>
-              <li className="flex items-center gap-2 pt-2 text-xs font-extrabold text-neutral-400">
-                <ShieldCheck size={16} className="shrink-0 text-[#DC2626]" />
-                <span>Constituida bajo Ley N° 20.500</span>
+              <li className="flex items-center gap-2 pt-2 text-xs font-extrabold text-white">
+                <ShieldCheck size={16} className="shrink-0 text-[#F2B632]" strokeWidth={2.5} />
+                <span>Constituida bajo Ley N° 20.500[cite: 16]</span>
               </li>
             </ul>
           </div>
 
+          {/* Columna 4: Contacto y Redes */}
           <div>
-            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#FACC15]">
+            <h5 className="mb-4 text-xs font-black uppercase tracking-widest text-[#F2B632]">
               Jurisdicción y Contacto
             </h5>
-            <div className="space-y-3 text-sm font-bold text-neutral-300">
+            <div className="space-y-3 text-sm font-bold text-neutral-100">
               <p className="flex items-start gap-2.5">
-                <MapPin size={18} className="mt-0.5 shrink-0 text-[#DC2626]" />
+                <MapPin size={18} className="mt-0.5 shrink-0 text-[#F2B632]" strokeWidth={2.5} />
                 <span>
-                  Región del Biobío, Chile.
+                  Región del Biobío, Chile[cite: 16].
                   <br />
-                  <span className="text-xs text-neutral-400">
-                    Operaciones a nivel nacional.
+                  <span className="text-xs text-white/80">
+                    Operaciones a nivel nacional[cite: 16].
                   </span>
                 </span>
               </p>
               <p className="flex items-center gap-2.5">
-                <Globe size={18} className="shrink-0 text-[#FACC15]" />
+                <Globe size={18} className="shrink-0 text-[#F2B632]" strokeWidth={2.5} />
                 <span className="font-black text-white">brebiobio.cl</span>
               </p>
             </div>
 
-            {/* Redes Sociales Dinámicas: solo se renderizan si hay al menos un enlace configurado */}
+            {/* Redes Sociales Dinámicas */}
             {tieneRedes && (
-              <div className="mt-6 border-t border-neutral-800 pt-4">
-                <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-neutral-400">
+              <div className="mt-6 border-t border-white/20 pt-4">
+                <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-[#F2B632]">
                   Canales Oficiales
                 </p>
                 <div className="flex flex-wrap gap-2.5">
@@ -174,9 +155,9 @@ export default function Footer() {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="Instagram oficial"
-                      className="inline-flex items-center gap-1.5 rounded border-2 border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:border-[#DC2626] hover:bg-[#DC2626]"
+                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-black bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-[#F2B632]"
                     >
-                      <Instagram size={14} />
+                      <Instagram size={14} strokeWidth={2.5} />
                       <span>Instagram</span>
                     </a>
                   )}
@@ -186,9 +167,9 @@ export default function Footer() {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="Facebook oficial"
-                      className="inline-flex items-center gap-1.5 rounded border-2 border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:border-[#DC2626] hover:bg-[#DC2626]"
+                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-black bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-[#F2B632]"
                     >
-                      <Facebook size={14} />
+                      <Facebook size={14} strokeWidth={2.5} />
                       <span>Facebook</span>
                     </a>
                   )}
@@ -198,9 +179,9 @@ export default function Footer() {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="TikTok oficial"
-                      className="inline-flex items-center gap-1.5 rounded border-2 border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:border-[#FACC15] hover:bg-[#FACC15] hover:text-black"
+                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-black bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-[#F2B632]"
                     >
-                      <Video size={14} />
+                      <Video size={14} strokeWidth={2.5} />
                       <span>TikTok</span>
                     </a>
                   )}
@@ -210,13 +191,12 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-neutral-800 pt-6 text-xs font-bold text-neutral-400 sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/20 pt-6 text-xs font-bold text-neutral-100 sm:flex-row">
           <p>
-            © {new Date().getFullYear()} O.N.G. BRE BIO BIO · Búsqueda, Rescate
-            y Emergencia.
+            © {new Date().getFullYear()} O.N.G. BRE BIO BIO · Búsqueda, Rescate y Emergencia[cite: 16].
           </p>
-          <p className="uppercase tracking-wider text-[#FACC15]">
-            Región del Biobío · Chile
+          <p className="uppercase tracking-wider font-black text-[#F2B632]">
+            Región del Biobío · Chile[cite: 16]
           </p>
         </div>
       </div>
