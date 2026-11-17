@@ -17,8 +17,16 @@ import Inventario from './pages/dashboard/Inventario';
 import GestionDirectorio from './pages/dashboard/GestionDirectorio';
 import ConfiguracionSitio from './pages/dashboard/ConfiguracionSitio';
 import MiPerfil from './pages/dashboard/MiPerfil';
+import Tesoreria from './pages/dashboard/Tesoreria';
+import Auditoria from './pages/dashboard/Auditoria';
+import Cursos from './pages/dashboard/Cursos';
 
-const RutaProtegida = ({ children, rolesPermitidos, moduloRequerido }) => {
+const RutaProtegida = ({
+  children,
+  rolesPermitidos,
+  cargosPermitidos,
+  moduloRequerido,
+}) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) {
@@ -32,20 +40,25 @@ const RutaProtegida = ({ children, rolesPermitidos, moduloRequerido }) => {
   // 1. Si no está autenticado, redirige a Login
   if (!user) return <Navigate to="/login" replace />;
 
-  // 2. Validación por rol institucional o permiso granular activado por Superadmin
-  if (rolesPermitidos || moduloRequerido) {
+  // 2. Validación por rol institucional, cargo operativo múltiple o módulo activado por Superadmin
+  if (rolesPermitidos || cargosPermitidos || moduloRequerido) {
     const rolSistema = (profile?.rol || '').toLowerCase();
-    const cargoOng = (profile?.cargo_ong || '').toLowerCase();
+    const cargosUsuario = Array.isArray(profile?.cargos_operativos)
+      ? profile.cargos_operativos.map((c) => c.toLowerCase())
+      : [];
     const permisosModulos = profile?.permisos_modulos || {};
 
     const tieneRol =
-      rolesPermitidos &&
-      (rolesPermitidos.includes(rolSistema) || rolesPermitidos.includes(cargoOng));
+      rolesPermitidos && rolesPermitidos.includes(rolSistema);
+
+    const tieneCargo =
+      cargosPermitidos &&
+      cargosUsuario.some((c) => cargosPermitidos.includes(c));
 
     const tieneModuloActivo =
       moduloRequerido && Boolean(permisosModulos[moduloRequerido]);
 
-    if (!tieneRol && !tieneModuloActivo) {
+    if (!tieneRol && !tieneCargo && !tieneModuloActivo) {
       return <Navigate to="/mi-perfil" replace />;
     }
   }
@@ -88,10 +101,21 @@ export default function App() {
           />
           <Route path="/panel" element={<Navigate to="/mi-perfil" replace />} />
           <Route
+            path="/cursos"
+            element={
+              <RutaProtegida
+                rolesPermitidos={['voluntario', 'director', 'superadmin']}
+              >
+                <Cursos />
+              </RutaProtegida>
+            }
+          />
+          <Route
             path="/central-mando"
             element={
               <RutaProtegida
                 rolesPermitidos={['director', 'superadmin']}
+                cargosPermitidos={['do', 'dos', 'jc', 'lem', 'prehospitalario']}
                 moduloRequerido="central_mando"
               >
                 <CentralMando />
@@ -103,6 +127,7 @@ export default function App() {
             element={
               <RutaProtegida
                 rolesPermitidos={['director', 'superadmin']}
+                cargosPermitidos={['do', 'dos']}
                 moduloRequerido="inventario"
               >
                 <Inventario />
@@ -114,9 +139,29 @@ export default function App() {
             element={
               <RutaProtegida
                 rolesPermitidos={['director', 'superadmin']}
+                cargosPermitidos={['secretario', 'do', 'lem']}
                 moduloRequerido="gestion"
               >
                 <GestionDirectorio />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/tesoreria"
+            element={
+              <RutaProtegida
+                rolesPermitidos={['director', 'superadmin']}
+                cargosPermitidos={['tesorero']}
+              >
+                <Tesoreria />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/auditoria"
+            element={
+              <RutaProtegida rolesPermitidos={['superadmin']}>
+                <Auditoria />
               </RutaProtegida>
             }
           />
