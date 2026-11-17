@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { User, Shield, Book, Upload, CheckCircle, AlertCircle, FileText, Calendar } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { User, Shield, Book, Upload, CheckCircle, AlertCircle, FileText, Calendar, ShieldAlert, LogOut, Home } from 'lucide-react';
 
 export default function MiPerfil() {
+    const { signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [perfil, setPerfil] = useState(null);
     const [certificados, setCertificados] = useState([]);
@@ -113,6 +116,57 @@ export default function MiPerfil() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+            </div>
+        );
+    }
+
+    if (perfil?.estado_validacion === 'pendiente') {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-4 py-12 font-sans text-white">
+                <div className="w-full max-w-xl rounded-lg border-2 border-[#DC2626] bg-neutral-950 p-8 shadow-2xl sm:p-10">
+                    <div className="mb-6 flex items-center justify-between border-b border-neutral-800 pb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded border-b-4 border-[#DC2626] bg-black text-[#FACC15]">
+                                <ShieldAlert size={22} />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest text-[#FACC15]">
+                                    O.N.G. BRE BIO BIO
+                                </p>
+                                <h1 className="text-lg font-black uppercase tracking-tight text-white">
+                                    Verificación Institucional
+                                </h1>
+                            </div>
+                        </div>
+                        <span className="rounded border border-[#FACC15] bg-[#FACC15] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-black">
+                            Pendiente
+                        </span>
+                    </div>
+
+                    <p className="mb-8 text-base font-semibold leading-relaxed text-neutral-200">
+                        Tus datos han sido recibidos correctamente. La información
+                        institucional y antecedentes serán validados por los administradores
+                        de la organización antes de habilitar el acceso operativo completo.
+                    </p>
+
+                    <div className="flex flex-col gap-3 border-t border-neutral-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                        <Link
+                            to="/"
+                            className="inline-flex items-center justify-center gap-2 rounded border-2 border-neutral-700 px-5 py-3 text-xs font-extrabold uppercase tracking-wider text-neutral-200 transition-colors hover:border-white hover:text-white"
+                        >
+                            <Home size={16} />
+                            <span>Volver al Portal</span>
+                        </Link>
+
+                        <button
+                            onClick={signOut}
+                            className="inline-flex items-center justify-center gap-2 rounded bg-[#DC2626] px-6 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-red-700"
+                        >
+                            <LogOut size={16} />
+                            <span>Cerrar Sesión</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         );
     }

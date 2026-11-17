@@ -4,7 +4,7 @@ import { ShieldCheck, FileText, AlertCircle, UserCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export default function FichaVoluntarioPublica() {
-  const { rut } = useParams();
+  const { rut: identificador } = useParams();
   const [voluntario, setVoluntario] = useState(null);
   const [certificados, setCertificados] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,11 +13,13 @@ export default function FichaVoluntarioPublica() {
     const cargarFicha = async () => {
       setLoading(true);
 
+      // Consulta pública segura: nunca expone RUT, antecedentes médicos ni datos personales de contacto
       const { data: perfil, error: perfilError } = await supabase
         .from('perfiles')
-        .select('id, rut, nombre_completo, rol, activo')
-        .eq('rut', rut)
-        .single();
+        .select('id, nombre_completo, rol, activo, created_at')
+        .eq('id', identificador)
+        .eq('activo', true)
+        .maybeSingle();
 
       if (perfilError || !perfil) {
         setVoluntario(null);
@@ -39,13 +41,13 @@ export default function FichaVoluntarioPublica() {
       setLoading(false);
     };
 
-    if (rut) cargarFicha();
-  }, [rut]);
+    if (identificador) cargarFicha();
+  }, [identificador]);
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-gray-500">
-        Consultando acreditación del voluntario...
+      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-sm font-bold text-neutral-600">
+        Verificando credencial institucional...
       </div>
     );
   }
@@ -53,37 +55,47 @@ export default function FichaVoluntarioPublica() {
   if (!voluntario) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16">
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-          <AlertCircle size={48} className="mx-auto mb-4 text-red-600" />
-          <h1 className="text-2xl font-black text-gray-900">
-            Voluntario no encontrado
+        <div className="rounded-lg border-2 border-[#17191D] bg-white p-8 text-center shadow-[6px_6px_0px_0px_#17191D]">
+          <AlertCircle size={48} className="mx-auto mb-4 text-[#C8202F]" />
+          <h1 className="text-2xl font-black text-[#17191D]">
+            Credencial no encontrada o inactiva
           </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            No existe un registro activo asociado al RUT <strong>{rut}</strong>.
+          <p className="mt-2 text-sm font-semibold text-neutral-700">
+            El identificador consultado no corresponde a una credencial vigente
+            de ONG BRE BÍO-BÍO.
           </p>
         </div>
       </div>
     );
   }
 
+  const codigoInstitucional = `BRE-${voluntario.id.slice(0, 8).toUpperCase()}`;
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
-        <div className="bg-black p-6 text-white">
+    <div className="mx-auto max-w-3xl px-4 py-12 font-sans">
+      <div className="overflow-hidden rounded-lg border-2 border-[#17191D] bg-white shadow-[8px_8px_0px_0px_#17191D]">
+        <div className="border-b-4 border-[#C8202F] bg-[#17191D] p-6 text-white">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-red-600 bg-gray-800 text-2xl font-black">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#F2B632] bg-neutral-900 text-2xl font-black text-white">
                 {voluntario.nombre_completo?.charAt(0) || 'V'}
               </div>
               <div>
-                <h1 className="text-2xl font-black">
-                  {voluntario.nombre_completo || 'Voluntario BRE'}
+                <p className="text-xs font-bold text-[#F2B632]">
+                  Credencial Verificada · {codigoInstitucional}
+                </p>
+                <h1 className="text-2xl font-black tracking-tight">
+                  {voluntario.nombre_completo || 'Integrante BRE'}
                 </h1>
-                <p className="text-sm text-gray-400">RUT: {voluntario.rut}</p>
+                <p className="text-xs font-semibold text-neutral-400">
+                  Emisión:{' '}
+                  {new Date(voluntario.created_at).toLocaleDateString('es-CL')}{' '}
+                  · Estado: Vigente
+                </p>
               </div>
             </div>
 
-            <span className="inline-flex items-center gap-2 self-start rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wider sm:self-center">
+            <span className="inline-flex items-center gap-2 self-start rounded bg-[#C8202F] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white sm:self-center">
               <UserCheck size={16} />
               {voluntario.rol}
             </span>
@@ -91,29 +103,32 @@ export default function FichaVoluntarioPublica() {
         </div>
 
         <div className="p-6 md:p-8">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
-            <ShieldCheck className="text-green-600" size={22} />
-            Certificaciones Aprobadas
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-[#17191D]">
+            <ShieldCheck className="text-[#C8202F]" size={22} />
+            Certificaciones y Especialidades Aprobadas
           </h2>
 
           {certificados.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              Este miembro no registra certificados aprobados públicamente aún.
+            <p className="rounded border-2 border-dashed border-neutral-300 bg-[#F3F4F6] p-6 text-center text-sm font-semibold text-neutral-600">
+              Este integrante no registra certificaciones públicas aprobadas
+              aún.
             </p>
           ) : (
             <div className="space-y-3">
               {certificados.map((cert) => (
                 <div
                   key={cert.id}
-                  className="flex flex-col justify-between gap-3 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center"
+                  className="flex flex-col justify-between gap-3 rounded border-2 border-neutral-200 p-4 transition-colors hover:border-[#17191D] sm:flex-row sm:items-center"
                 >
                   <div>
-                    <h3 className="font-bold text-gray-900">
+                    <h3 className="font-black text-[#17191D]">
                       {cert.titulo_curso}
                     </h3>
-                    <p className="text-sm text-gray-600">{cert.institucion}</p>
+                    <p className="text-sm font-semibold text-neutral-700">
+                      {cert.institucion}
+                    </p>
                     {cert.fecha_emision && (
-                      <p className="mt-1 text-xs text-gray-400">
+                      <p className="mt-1 text-xs font-bold text-neutral-500">
                         Emitido:{' '}
                         {new Date(cert.fecha_emision).toLocaleDateString(
                           'es-CL'
@@ -126,9 +141,9 @@ export default function FichaVoluntarioPublica() {
                       href={cert.archivo_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 hover:underline"
+                      className="inline-flex items-center gap-1.5 rounded bg-[#17191D] px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-[#C8202F]"
                     >
-                      <FileText size={16} /> Ver Documento
+                      <FileText size={14} /> Ver Documento
                     </a>
                   )}
                 </div>

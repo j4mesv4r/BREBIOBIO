@@ -18,12 +18,12 @@ export default function Navbar() {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-50 border-b-4 border-red-600 bg-neutral-950 shadow-xl shadow-black/40">
+    <header className="sticky top-0 z-50 border-b-4 border-[#C8202F] bg-[#17191D] shadow-xl shadow-black/30">
       {/* Franja Superior de Respaldo Legal */}
-      <div className="hidden border-b border-neutral-800 bg-black md:block">
-        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-[11px] font-bold uppercase tracking-widest text-neutral-300 sm:px-6 lg:px-8">
+      <div className="hidden border-b border-neutral-800 bg-black/40 md:block">
+        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-4 text-xs font-semibold tracking-wide text-neutral-300 sm:px-6 lg:px-8">
           <span>O.N.G. BRE BIO BIO · Personalidad Jurídica Ley N° 20.500</span>
-          <span className="text-amber-400">
+          <span className="text-[#F2B632]">
             Región del Biobío · Despliegue Nacional
           </span>
         </div>

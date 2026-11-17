@@ -5,18 +5,21 @@ export default function Button({
   ...props
 }) {
   const variants = {
-    primary: 'bg-[#DC2626] text-white hover:bg-red-700',
-    secondary: 'bg-[#1E3A8A] text-white hover:bg-blue-900',
-    outline: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
+    primary: 'bg-[#C8202F] text-white hover:bg-[#a91926]',
+    secondary: 'bg-[#17191D] text-white hover:bg-neutral-800',
+    tactical: 'bg-[#F2B632] text-[#17191D] hover:bg-[#eab308]',
+    outline:
+      'border-2 border-[#17191D] bg-white text-[#17191D] hover:bg-neutral-100',
   };
 
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${variants[variant] || variants.primary} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-bold tracking-wide transition-colors disabled:opacity-50 ${
+        variants[variant] || variants.primary
+      } ${className}`}
       {...props}
     >
       {children}
     </button>
   );
 }
-

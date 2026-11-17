@@ -370,12 +370,12 @@ export default function PanelVoluntario() {
                 >
                   {savingPerfil ? 'Guardando...' : 'Actualizar Datos'}
                 </button>
-                {datosPerfil.rut && (
+                {profile?.id && (
                   <Link
-                    to={`/voluntario/${encodeURIComponent(datosPerfil.rut)}`}
-                    className="block text-center text-xs font-semibold text-red-600 hover:underline"
+                    to={`/voluntario/${profile.id}`}
+                    className="block text-center text-xs font-semibold text-[#C8202F] hover:underline"
                   >
-                    Ver mi ficha pública →
+                    Ver mi credencial pública (QR)
                   </Link>
                 )}
               </form>

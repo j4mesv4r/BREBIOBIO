@@ -66,10 +66,13 @@ export const AuthProvider = ({ children }) => {
         if (currentUser) {
           const nuevoPerfil = {
             id: currentUser.id,
-            email: currentUser.email,
-            nombre_completo: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Postulante Nuevo',
-            rol: 'usuario',
-            estado_validacion: 'pendiente'
+            nombre_completo:
+              currentUser.user_metadata?.nombre_completo ||
+              currentUser.user_metadata?.full_name ||
+              currentUser.user_metadata?.name ||
+              'Postulante Nuevo',
+            rol: 'postulante',
+            estado_validacion: 'pendiente',
           };
           await supabase.from('perfiles').upsert([nuevoPerfil]);
           setProfile(nuevoPerfil);

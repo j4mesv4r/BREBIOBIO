@@ -8,12 +8,14 @@ export default {
     extend: {
       colors: {
         bre: {
-          red: '#DC2626',
-          navy: '#1E3A8A',
+          red: '#C8202F',
+          white: '#FFFFFF',
+          graphite: '#17191D',
+          amber: '#F2B632',
+          gray: '#F3F4F6',
         },
       },
     },
   },
   plugins: [],
 };
-

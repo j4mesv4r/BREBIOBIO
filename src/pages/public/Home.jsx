@@ -15,48 +15,36 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
-  const respaldoFotos = [
-    'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&q=80&w=1400',
-    'https://images.unsplash.com/photo-1516574187841-cb9cc2ca948b?auto=format&fit=crop&q=80&w=1400',
-    'https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&q=80&w=1400',
-  ];
-
-  const fotoPrincipal = fotosTerreno[0] || respaldoFotos[0];
-  const galeriaMostrar =
-    fotosTerreno.length > 0 ? fotosTerreno : respaldoFotos;
+  const fotoPrincipal = fotosTerreno[0] || null;
+  const galeriaMostrar = fotosTerreno;
 
   const especialidades = [
     {
       icon: Compass,
-      codigo: '01',
       titulo: 'Búsqueda Especializada',
       descripcion:
         'Rastreo sistemático y georreferenciado de personas extraviadas en zonas agrestes y urbanas.',
     },
     {
       icon: Shield,
-      codigo: '02',
       titulo: 'Rescate en Terreno',
       descripcion:
         'Extracción segura, estabilización y evacuación bajo estándares de protección civil.',
     },
     {
       icon: HeartPulse,
-      codigo: '03',
       titulo: 'Primeros Auxilios',
       descripcion:
         'Atención prehospitalaria inmediata en el punto del incidente antes del traslado médico.',
     },
     {
       icon: Mountain,
-      codigo: '04',
       titulo: 'Rescate en Altura',
       descripcion:
         'Maniobras técnicas con cuerdas, anclajes y polipastos en pendientes y estructuras.',
     },
     {
       icon: Flame,
-      codigo: '05',
       titulo: 'Emergencias y Desastres',
       descripcion:
         'Despliegue rápido ante terremotos, inundaciones, incendios forestales y remociones.',
@@ -64,24 +52,19 @@ export default function Home() {
   ];
 
   return (
-    <div className="overflow-x-hidden bg-white font-sans text-neutral-950">
-      {/* =====================================================================
-          1. PORTADA PRINCIPAL (HERO CON TARJETA 3D EN PERSPECTIVA)
-      ===================================================================== */}
-      <section className="border-b-4 border-amber-400 bg-neutral-950 text-white">
+    <div className="overflow-x-hidden bg-white font-sans text-[#17191D]">
+      {/* 1. Portada Principal */}
+      <section className="border-b-4 border-[#F2B632] bg-[#17191D] text-white">
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
           <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12">
-            {/* Mensaje Ejecutivo */}
+            {/* Mensaje Institucional */}
             <div className="space-y-7 lg:col-span-7">
-              <div className="inline-flex items-center gap-2 rounded bg-red-600 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-red-950/80">
-                <span>O.N.G. BRE BIO BIO · Chile</span>
+              <div className="inline-flex items-center rounded bg-[#C8202F] px-4 py-1.5 text-xs font-bold tracking-wide text-white shadow-md">
+                O.N.G. BRE BIO BIO · Región del Biobío
               </div>
 
-              <h1 className="text-4xl font-black uppercase leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Preparados para responder,{' '}
-                <span className="block text-amber-400 sm:inline">
-                  comprometidos con la vida.
-                </span>
+              <h1 className="max-w-2xl text-4xl font-black leading-[1.06] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Preparados para responder, comprometidos con la vida.
               </h1>
 
               <p className="max-w-xl text-base font-semibold leading-relaxed text-neutral-300 sm:text-lg">
@@ -92,7 +75,7 @@ export default function Home() {
               <div className="flex flex-col gap-4 pt-2 sm:flex-row">
                 <Link
                   to="/apoyo"
-                  className="inline-flex items-center justify-center gap-2.5 rounded-lg bg-red-600 px-7 py-4 text-xs font-black uppercase tracking-wider text-white shadow-xl shadow-red-950/70 transition-all hover:-translate-y-0.5 hover:bg-red-700 sm:text-sm"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-lg bg-[#C8202F] px-7 py-4 text-sm font-bold tracking-wide text-white shadow-lg transition-colors hover:bg-[#a91926]"
                 >
                   <Building2 size={18} />
                   <span>Solicitar Apoyo Institucional</span>
@@ -101,47 +84,61 @@ export default function Home() {
 
                 <Link
                   to="/postular"
-                  className="inline-flex items-center justify-center gap-2.5 rounded-lg bg-amber-400 px-7 py-4 text-xs font-black uppercase tracking-wider text-black shadow-xl shadow-black/50 transition-all hover:-translate-y-0.5 hover:bg-amber-300 sm:text-sm"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-lg bg-[#F2B632] px-7 py-4 text-sm font-bold tracking-wide text-[#17191D] shadow-lg transition-colors hover:bg-[#eab308]"
                 >
                   <UserPlus size={18} />
                   <span>Postular como Voluntario</span>
                 </Link>
               </div>
 
-              <div className="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-800 pt-6 text-xs font-extrabold uppercase tracking-wider text-neutral-400">
+              <div className="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-800 pt-6 text-xs font-bold tracking-wide text-neutral-300">
                 <span className="flex items-center gap-2">
-                  <FileCheck2 size={16} className="text-red-500" />
+                  <FileCheck2 size={16} className="text-[#C8202F]" />
                   Personalidad Jurídica Ley N° 20.500
                 </span>
                 <span className="flex items-center gap-2">
-                  <Shield size={16} className="text-amber-400" />
+                  <Shield size={16} className="text-[#F2B632]" />
                   Cobertura Regional y Nacional
                 </span>
               </div>
             </div>
 
-            {/* Tarjeta Visual 3D en Perspectiva */}
+            {/* Tarjeta Visual Focal 3D */}
             <div className="escena-3d lg:col-span-5">
-              <div className="tarjeta-3d sombra-volumetrica-oscura overflow-hidden rounded-2xl border-2 border-neutral-800 bg-neutral-900">
-                <div className="relative h-80 bg-neutral-800 sm:h-96">
-                  <img
-                    src={fotoPrincipal}
-                    alt="Operaciones O.N.G. BRE BIO BIO"
-                    className="h-full w-full object-cover"
-                  />
-                  {/* Sello flotante en eje Z */}
-                  <div className="capa-z-20 absolute right-4 top-4 h-16 w-16 rounded-full border-2 border-red-600 bg-white p-0.5 shadow-2xl">
-                    <img
-                      src="/logo-bre.png"
-                      alt="Escudo BRE"
-                      className="h-full w-full rounded-full object-contain"
-                    />
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-red-600 bg-black/90 px-6 py-4">
-                    <span className="text-xs font-black uppercase tracking-widest text-white">
-                      Servicio y Vocación
+              <div className="tarjeta-3d sombra-volumetrica-oscura overflow-hidden rounded-2xl border-2 border-neutral-800 bg-[#17191D]">
+                <div className="relative flex h-80 items-center justify-center bg-neutral-900 sm:h-96">
+                  {fotoPrincipal ? (
+                    <>
+                      <img
+                        src={fotoPrincipal}
+                        alt="Operaciones ONG BRE BÍO-BÍO"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="capa-z-20 absolute right-4 top-4 h-16 w-16 rounded-full border-2 border-[#C8202F] bg-white p-0.5 shadow-2xl">
+                        <img
+                          src="/logo-bre.png"
+                          alt="Emblema oficial ONG BRE BÍO-BÍO"
+                          className="h-full w-full rounded-full object-contain"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center p-8 text-center">
+                      <img
+                        src="/logo-bre.png"
+                        alt="Emblema oficial ONG BRE BÍO-BÍO"
+                        className="mb-4 h-40 w-40 object-contain"
+                      />
+                      <p className="text-sm font-bold tracking-wide text-neutral-300">
+                        Búsqueda · Rescate · Emergencia
+                      </p>
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-[#C8202F] bg-[#17191D]/95 px-6 py-4">
+                    <span className="text-xs font-extrabold tracking-wide text-white">
+                      SERVICIO Y VOCACIÓN
                     </span>
-                    <span className="text-xs font-black uppercase tracking-widest text-amber-400">
+                    <span className="text-xs font-extrabold tracking-wide text-[#F2B632]">
                       Biobío · Chile
                     </span>
                   </div>
@@ -152,187 +149,172 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =====================================================================
-          2. ESPECIALIDADES OPERATIVAS (TARJETAS 3D DESCOMPRIMIDAS)
-      ===================================================================== */}
+      {/* 2. Especialidades Operativas */}
       <section className="bg-white py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-16 max-w-2xl">
-            <span className="text-xs font-black uppercase tracking-[0.2em] text-red-600">
-              Capacidades Técnicas
-            </span>
-            <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-black sm:text-5xl">
+          <div className="mb-14 max-w-2xl border-l-4 border-[#C8202F] pl-5">
+            <h2 className="text-3xl font-black tracking-tight text-[#17191D] sm:text-4xl">
               Nuestras Especialidades
             </h2>
+            <p className="mt-2 text-base font-semibold text-neutral-700">
+              Células operativas entrenadas para intervenir con eficacia en
+              emergencias, catástrofes y rescates complejos.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {especialidades.map((esp, idx) => {
+          <div className="grid grid-cols-1 gap-7 md:grid-cols-2 lg:grid-cols-3">
+            {especialidades.map((esp) => {
               const IconComponent = esp.icon;
               return (
-                <div key={esp.codigo} className="escena-3d">
-                  <div
-                    className={`${
-                      idx % 2 === 0
-                        ? 'tarjeta-3d'
-                        : 'tarjeta-3d tarjeta-3d-inversa'
-                    } sombra-volumetrica-clara flex h-full flex-col justify-between rounded-xl border-2 border-neutral-950 bg-white p-8 hover:border-red-600`}
-                  >
-                    <div>
-                      <div className="mb-6 flex items-center justify-between">
-                        <div className="capa-z-10 flex h-14 w-14 items-center justify-center rounded-lg border-b-4 border-red-600 bg-black text-amber-400 shadow-lg">
-                          <IconComponent size={26} />
-                        </div>
-                        <span className="text-sm font-black text-neutral-300">
-                          #{esp.codigo}
-                        </span>
-                      </div>
-
-                      <h3 className="capa-z-10 mb-3 text-xl font-black uppercase text-black">
-                        {esp.titulo}
-                      </h3>
-                      <p className="text-sm font-semibold leading-relaxed text-neutral-700">
-                        {esp.descripcion}
-                      </p>
+                <div
+                  key={esp.titulo}
+                  className="flex h-full flex-col justify-between rounded-xl border-2 border-[#17191D] bg-white p-8 shadow-[6px_6px_0px_0px_#17191D]"
+                >
+                  <div>
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border-b-4 border-[#C8202F] bg-[#17191D] text-[#F2B632]">
+                      <IconComponent size={24} />
                     </div>
+                    <h3 className="mb-2.5 text-xl font-black text-[#17191D]">
+                      {esp.titulo}
+                    </h3>
+                    <p className="text-sm font-semibold leading-relaxed text-neutral-700">
+                      {esp.descripcion}
+                    </p>
                   </div>
                 </div>
               );
             })}
 
-            {/* Tarjeta Institucional de Acreditación */}
-            <div className="escena-3d">
-              <div className="tarjeta-3d sombra-volumetrica-clara flex h-full flex-col justify-between rounded-xl border-2 border-black bg-red-600 p-8 text-white">
-                <div>
-                  <span className="mb-6 inline-block rounded bg-black px-3 py-1 text-xs font-black uppercase tracking-widest text-amber-400">
-                    Estándar Institucional
-                  </span>
-                  <h3 className="capa-z-10 mb-3 text-2xl font-black uppercase leading-tight">
-                    Personal Auditado y Certificado
-                  </h3>
-                  <p className="text-sm font-semibold leading-relaxed text-white/95">
-                    Estructura formal con Directorio, Comisión de Ética y
-                    validación documental de cada voluntario activo.
-                  </p>
-                </div>
-                <Link
-                  to="/nosotros"
-                  className="mt-8 inline-flex items-center justify-center gap-2 rounded-lg bg-black px-5 py-3.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-900"
-                >
-                  <span>Ver Estatutos</span>
-                  <ArrowRight size={15} />
-                </Link>
+            {/* Bloque de Acreditación */}
+            <div className="flex h-full flex-col justify-between rounded-xl border-2 border-[#17191D] bg-[#C8202F] p-8 text-white shadow-[6px_6px_0px_0px_#17191D]">
+              <div>
+                <h3 className="mb-3 text-2xl font-black leading-tight">
+                  Personal Auditado y Certificado
+                </h3>
+                <p className="text-sm font-semibold leading-relaxed text-white/95">
+                  Estructura formal con Directorio, Comisión de Ética y
+                  validación documental de cada voluntario activo.
+                </p>
               </div>
+              <Link
+                to="/nosotros"
+                className="mt-8 inline-flex items-center justify-center gap-2 rounded-lg bg-[#17191D] px-5 py-3.5 text-xs font-bold tracking-wide text-white transition-colors hover:bg-neutral-800"
+              >
+                <span>Ver Estatutos</span>
+                <ArrowRight size={15} />
+              </Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* =====================================================================
-          3. DIRECTORIO ACTUAL Y ORGANIGRAMA CON FOTOGRAFÍAS
-      ===================================================================== */}
+      {/* 3. Directorio Actual */}
       <OrganigramaDirectorio />
 
-      {/* =====================================================================
-          4. REGISTRO EN TERRENO (GALERÍA AUTOMÁTICA CON RELIEVE 3D)
-      ===================================================================== */}
+      {/* 4. Actividad en Terreno */}
       <section className="bg-white py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-14 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <span className="text-xs font-black uppercase tracking-[0.2em] text-red-600">
-                Evidencia Operativa
-              </span>
-              <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-black sm:text-5xl">
+          <div className="mb-12 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div className="border-l-4 border-[#F2B632] pl-5">
+              <h2 className="text-3xl font-black tracking-tight text-[#17191D] sm:text-4xl">
                 Actividad en Terreno
               </h2>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 bg-neutral-100 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-              <Camera size={16} className="text-red-600" />
+            <div className="inline-flex items-center gap-2 rounded-lg border-2 border-[#17191D] bg-neutral-50 px-4 py-2 text-xs font-bold text-[#17191D]">
+              <Camera size={16} className="text-[#C8202F]" />
               <span>Despliegues y Simulacros</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {galeriaMostrar.map((src, idx) => (
-              <div key={idx} className="escena-3d">
-                <div className="tarjeta-3d sombra-volumetrica-clara overflow-hidden rounded-xl border-2 border-neutral-900 bg-neutral-950">
+          {galeriaMostrar.length === 0 ? (
+            <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-[#F3F4F6] p-10 text-center">
+              <Camera size={32} className="mx-auto mb-3 text-[#C8202F]" />
+              <p className="text-sm font-bold text-[#17191D]">
+                Archivo fotográfico institucional en preparación
+              </p>
+              <p className="mt-1 text-xs font-semibold text-neutral-600">
+                Las fotografías oficiales de operaciones y simulacros en{' '}
+                <code>src/assets/terreno/</code> se mostrarán automáticamente
+                aquí.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {galeriaMostrar.map((src, idx) => (
+                <div
+                  key={idx}
+                  className="overflow-hidden rounded-xl border-2 border-[#17191D] bg-[#17191D] shadow-md"
+                >
                   <div className="relative h-64 overflow-hidden">
                     <img
                       src={src}
-                      alt={`Operación O.N.G. BRE BIO BIO #${idx + 1}`}
+                      alt={`Operación ONG BRE BÍO-BÍO #${idx + 1}`}
                       className="h-full w-full object-cover"
                     />
-                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-amber-400 bg-black/85 px-4 py-2.5">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-white">
-                        O.N.G. BRE BIO BIO
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t-2 border-[#F2B632] bg-[#17191D]/90 px-4 py-2.5">
+                      <span className="text-xs font-bold text-white">
+                        ONG BRE BÍO-BÍO
                       </span>
-                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
-                        #{String(idx + 1).padStart(2, '0')}
+                      <span className="text-xs font-bold text-[#F2B632]">
+                        Registro #{String(idx + 1).padStart(2, '0')}
                       </span>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* =====================================================================
-          5. CANALES DE ACCIÓN DIRECTA (EMPRESAS/MUNICIPIOS VS VOLUNTARIOS)
-      ===================================================================== */}
-      <section className="border-t-4 border-red-600 bg-neutral-950 py-24 text-white">
+      {/* 5. Canales de Acción Directa */}
+      <section className="border-t-4 border-[#C8202F] bg-[#17191D] py-24 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-            <div className="escena-3d">
-              <div className="tarjeta-3d sombra-volumetrica-oscura flex h-full flex-col justify-between rounded-2xl border-2 border-neutral-800 bg-neutral-900 p-10 hover:border-red-600">
-                <div>
-                  <span className="mb-3 block text-xs font-black uppercase tracking-widest text-red-500">
-                    Empresas · Municipios · Organismos
-                  </span>
-                  <h3 className="mb-4 text-2xl font-black uppercase sm:text-3xl">
-                    Solicitar Apoyo Técnico u Operativo
-                  </h3>
-                  <p className="mb-8 text-sm font-semibold leading-relaxed text-neutral-300 sm:text-base">
-                    Coordina apoyo en emergencias, cobertura preventiva,
-                    simulacros o capacitación en primeros auxilios para tu
-                    organización.
-                  </p>
-                </div>
-                <Link
-                  to="/apoyo"
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-red-700"
-                >
-                  <span>Ingresar Solicitud Institucional</span>
-                  <ArrowRight size={17} />
-                </Link>
+            <div className="flex h-full flex-col justify-between rounded-2xl border-2 border-neutral-800 bg-neutral-900 p-10">
+              <div>
+                <p className="mb-2 text-xs font-bold text-[#F2B632]">
+                  Empresas · Municipios · Organismos
+                </p>
+                <h3 className="mb-4 text-2xl font-black sm:text-3xl">
+                  Solicitar Apoyo Técnico u Operativo
+                </h3>
+                <p className="mb-8 max-w-prose text-sm font-semibold leading-relaxed text-neutral-300 sm:text-base">
+                  Coordina apoyo en emergencias, cobertura preventiva,
+                  simulacros o capacitación en primeros auxilios para tu
+                  organización.
+                </p>
               </div>
+              <Link
+                to="/apoyo"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#C8202F] px-6 py-4 text-sm font-bold tracking-wide text-white transition-colors hover:bg-[#a91926]"
+              >
+                <span>Ingresar Solicitud Institucional</span>
+                <ArrowRight size={17} />
+              </Link>
             </div>
 
-            <div className="escena-3d">
-              <div className="tarjeta-3d tarjeta-3d-inversa sombra-volumetrica-oscura flex h-full flex-col justify-between rounded-2xl border-2 border-amber-300 bg-amber-400 p-10 text-black">
-                <div>
-                  <span className="mb-3 block text-xs font-black uppercase tracking-widest text-neutral-900">
-                    Reclutamiento Oficial
-                  </span>
-                  <h3 className="mb-4 text-2xl font-black uppercase sm:text-3xl">
-                    Postulación de Voluntarios
-                  </h3>
-                  <p className="mb-8 text-sm font-bold leading-relaxed text-neutral-950 sm:text-base">
-                    Integra una institución organizada y preparada. Inicia tu
-                    proceso formal, acredita tus conocimientos y fórmate en
-                    terreno.
-                  </p>
-                </div>
-                <Link
-                  to="/postular"
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-900"
-                >
-                  <span>Postular a O.N.G. BRE BIO BIO</span>
-                  <ArrowRight size={17} />
-                </Link>
+            <div className="flex h-full flex-col justify-between rounded-2xl border-2 border-[#F2B632] bg-[#F2B632] p-10 text-[#17191D]">
+              <div>
+                <p className="mb-2 text-xs font-bold text-[#17191D]">
+                  Reclutamiento Oficial
+                </p>
+                <h3 className="mb-4 text-2xl font-black sm:text-3xl">
+                  Postulación de Voluntarios
+                </h3>
+                <p className="mb-8 max-w-prose text-sm font-bold leading-relaxed text-[#17191D] sm:text-base">
+                  Integra una institución organizada y preparada. Inicia tu
+                  proceso formal, acredita tus conocimientos y fórmate en
+                  terreno.
+                </p>
               </div>
+              <Link
+                to="/postular"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#17191D] px-6 py-4 text-sm font-bold tracking-wide text-white transition-colors hover:bg-neutral-800"
+              >
+                <span>Postular a O.N.G. BRE BIO BIO</span>
+                <ArrowRight size={17} />
+              </Link>
             </div>
           </div>
         </div>
