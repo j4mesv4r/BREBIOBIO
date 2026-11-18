@@ -12,57 +12,110 @@ import {
     Save,
     X,
     ShieldAlert,
-    Sparkles,
+    HeartPulse,
+    CreditCard,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { REGIONES_CHILE } from '../../data/chileRegionesComunas';
 
-const ESPECIALIDADES_SUGERIDAS = [
-    { nombre: 'Búsqueda Agreste', abrev: 'B. AGR' },
-    { nombre: 'Rescate Vertical', abrev: 'R. VERT' },
-    { nombre: 'Rescate Acuático', abrev: 'R. ACU' },
-    { nombre: 'Primeros Auxilios', abrev: 'P. AUX' },
-    { nombre: 'Atención Prehospitalaria', abrev: 'PREHOSP' },
-    { nombre: 'Comunicaciones', abrev: 'COMUN' },
-    { nombre: 'Logística', abrev: 'LOGÍST' },
-    { nombre: 'Cartografía y GPS', abrev: 'CART/GPS' },
-    { nombre: 'Operador Drone', abrev: 'DRONE' },
-    { nombre: 'Unidad Canina K9', abrev: 'K9' },
-    { nombre: 'Sistema Comando Incidentes', abrev: 'SCI' },
-    { nombre: 'Rescate Vehicular', abrev: 'R. VEH' },
+// Catálogo Estándar Internacional (INSARAG / FEMA / NFPA) + Nacional (SENAPRED) + Administrativo
+const ESPECIALIDADES_CATALOGO = [
+    { nombre: 'Búsqueda y Rescate Agreste (GSAR)', abrev: 'GSAR' },
+    { nombre: 'Rescate Urbano (USAR / INSARAG)', abrev: 'USAR' },
+    { nombre: 'Rescate Vertical y Cuerdas', abrev: 'R. VERT' },
+    { nombre: 'Rescate en Aguas Rápidas e Inundaciones (SRT)', abrev: 'SRT/ACU' },
+    { nombre: 'Buceo de Búsqueda y Recuperación', abrev: 'BUCEO' },
+    { nombre: 'Rescate en Montaña y Media Montaña', abrev: 'MONTAÑA' },
+    { nombre: 'Rescate Vehicular y Extricación', abrev: 'R. VEH' },
+    { nombre: 'Atención Prehospitalaria / Triage START', abrev: 'PREHOSP' },
+    { nombre: 'Primeros Auxilios en Zonas Remotas (WFR)', abrev: 'WFR' },
+    { nombre: 'Operador RPAS / Drone Táctico', abrev: 'RPAS/DRONE' },
+    { nombre: 'Unidad Canina de Búsqueda (K9)', abrev: 'K9' },
+    { nombre: 'Cartografía, SIG y Navegación GPS', abrev: 'SIG/GPS' },
+    { nombre: 'Telecomunicaciones VHF / UHF / HF', abrev: 'TELECO' },
+    { nombre: 'Sistema de Comando de Incidentes (SCI)', abrev: 'SCI' },
+    { nombre: 'Materiales Peligrosos (HAZMAT)', abrev: 'HAZMAT' },
+    { nombre: 'Gestión Logística y Abastecimiento', abrev: 'LOGÍST' },
+    { nombre: 'Administración y Gestión de Proyectos', abrev: 'ADMIN' },
+    { nombre: 'Tesorería, Contabilidad y Rendiciones', abrev: 'FINANZAS' },
+    { nombre: 'Instrucción y Capacitación Operativa', abrev: 'INSTRUC' },
+    { nombre: 'Apoyo Psicosocial en Emergencias', abrev: 'PSICOSOC' },
 ];
 
-const AVATAR_GENERICO_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280">
-    <rect width="240" height="280" fill="#171717"/>
-    <circle cx="120" cy="95" r="46" fill="#525252"/>
-    <path d="M40 255c0-48 36-78 80-78s80 30 80 78" fill="#525252"/>
-    <rect x="0" y="242" width="240" height="38" fill="#D90429"/>
-    <text x="120" y="266" font-family="sans-serif" font-size="14" font-weight="900" fill="#FFFFFF" text-anchor="middle">AVATAR PROVISORIO</text>
-  </svg>`
-)}`;
+// Formateador y Validador Matemático Módulo 11 de RUT Chileno
+function formatearRutChileno(valor) {
+    const limpio = (valor || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    if (limpio.length <= 1) return limpio;
+    const cuerpo = limpio.slice(0, -1);
+    const dv = limpio.slice(-1);
+    const cuerpoFormateado = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${cuerpoFormateado}-${dv}`;
+}
+
+function validarRutChileno(rutFormateado) {
+    const limpio = (rutFormateado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    if (limpio.length < 8) return false;
+    const cuerpo = limpio.slice(0, -1);
+    const dvIngresado = limpio.slice(-1);
+
+    if (!/^\d+$/.test(cuerpo)) return false;
+
+    let suma = 0;
+    let multiplicador = 2;
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+        suma += parseInt(cuerpo[i], 10) * multiplicador;
+        multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+    }
+
+    const resto = 11 - (suma % 11);
+    const dvEsperado =
+        resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
+
+    return dvIngresado === dvEsperado;
+}
 
 function abreviarEspecialidadesParaCredencial(lista) {
-    if (!Array.isArray(lista) || lista.length === 0) return '';
+    if (!Array.isArray(lista) || lista.length === 0) return 'BÚSQUEDA Y RESCATE';
     const textoCompleto = lista.join(' · ').toUpperCase();
-    if (lista.length <= 2 && textoCompleto.length <= 34) {
+    if (lista.length <= 2 && textoCompleto.length <= 42) {
         return textoCompleto;
     }
     return lista
         .map((esp) => {
-            const encontrada = ESPECIALIDADES_SUGERIDAS.find(
+            const encontrada = ESPECIALIDADES_CATALOGO.find(
                 (s) => s.nombre.toLowerCase() === esp.toLowerCase()
             );
             if (encontrada) return encontrada.abrev;
             return esp
                 .split(' ')
-                .map((p) => (p.length > 4 ? p.slice(0, 4) + '.' : p))
+                .map((p) => (p.length > 5 ? p.slice(0, 4) + '.' : p))
                 .join(' ')
                 .toUpperCase();
         })
         .join(' · ');
 }
+
+function obtenerAvatarGenericoUrl(genero) {
+    return genero === 'femenino'
+        ? '/avatar-femenino.png'
+        : '/avatar-masculino.png';
+}
+
+const RESPALDO_AVATAR_SVG = (genero) =>
+    `data:image/svg+xml;utf8,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280">
+      <rect width="240" height="280" fill="#171717"/>
+      <circle cx="120" cy="95" r="46" fill="${genero === 'femenino' ? '#9D174D' : '#374151'
+        }"/>
+      <path d="M40 255c0-48 36-78 80-78s80 30 80 78" fill="${genero === 'femenino' ? '#9D174D' : '#374151'
+        }"/>
+      <rect x="0" y="242" width="240" height="38" fill="#D90429"/>
+      <text x="120" y="266" font-family="sans-serif" font-size="13" font-weight="900" fill="#FFFFFF" text-anchor="middle">${genero === 'femenino' ? 'AVATAR FEMENINO' : 'AVATAR MASCULINO'
+        }</text>
+    </svg>`
+    )}`;
 
 export default function MiPerfil() {
     const { user, profile, refreshProfile } = useAuth();
@@ -74,10 +127,12 @@ export default function MiPerfil() {
     const [form, setForm] = useState({
         nombre_completo: '',
         rut: '',
+        genero: 'masculino',
         telefono: '',
-        comuna: '',
+        region: 'Región del Biobío',
+        comuna: 'Concepción',
         especialidades: [],
-        tipo_sangre: 'O+',
+        tipo_sangre: 'No especificado',
         alergias: '',
         contacto_emergencia_nombre: '',
         contacto_emergencia_telefono: '',
@@ -86,7 +141,7 @@ export default function MiPerfil() {
         usando_avatar_generico: false,
     });
 
-    // Input de Chips/Tags + Autocomplete para Especialidades
+    // Chips/Tags + Autocomplete
     const [inputEsp, setInputEsp] = useState('');
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
@@ -99,14 +154,23 @@ export default function MiPerfil() {
     const [archivoCert, setArchivoCert] = useState(null);
     const [subiendoCert, setSubiendoCert] = useState(false);
 
-    // Credencial PNG + QR
-    const canvasRef = useRef(null);
+    // Canvases Credencial Doble Cara Horizontal (1012 x 638)
+    const canvasFrenteRef = useRef(null);
+    const canvasReversoRef = useRef(null);
+    const [ladoCredencial, setLadoCredencial] = useState('frente');
     const [credencialLista, setCredencialLista] = useState(false);
 
     const rol = (profile?.rol || 'postulante').toLowerCase();
     const esSA = rol === 'superadmin';
     const aprobado = esSA || profile?.estado_validacion === 'aprobado';
     const onboardingListo = esSA || Boolean(profile?.onboarding_completado);
+
+    const rutValido = form.rut.trim() === '' ? true : validarRutChileno(form.rut);
+    const faltaGrupoSanguineo =
+        !form.tipo_sangre || form.tipo_sangre === 'No especificado';
+
+    const comunasDisponibles =
+        REGIONES_CHILE.find((r) => r.region === form.region)?.comunas || [];
 
     useEffect(() => {
         if (profile) {
@@ -118,11 +182,14 @@ export default function MiPerfil() {
 
             setForm({
                 nombre_completo: profile.nombre_completo || '',
-                rut: profile.rut || '',
+                rut: profile.rut ? formatearRutChileno(profile.rut) : '',
+                genero:
+                    profile.genero === 'femenino' ? 'femenino' : 'masculino',
                 telefono: profile.telefono || '',
-                comuna: profile.comuna || '',
+                region: profile.region || 'Región del Biobío',
+                comuna: profile.comuna || 'Concepción',
                 especialidades: listaEsp,
-                tipo_sangre: profile.tipo_sangre || 'O+',
+                tipo_sangre: profile.tipo_sangre || 'No especificado',
                 alergias: profile.alergias || '',
                 contacto_emergencia_nombre: profile.contacto_emergencia_nombre || '',
                 contacto_emergencia_telefono: profile.contacto_emergencia_telefono || '',
@@ -151,7 +218,7 @@ export default function MiPerfil() {
     };
 
     // ============================================================================
-    // CÁLCULO DE ESTADO DE PRÓRROGAS PARA AVATAR GENÉRICO (7 + 15 + 15 DÍAS)
+    // PRÓRROGAS DE AVATAR GENÉRICO (7 + 15 + 15 DÍAS)
     // ============================================================================
     const calcularEstadoAvatar = () => {
         if (form.foto_url && !form.usando_avatar_generico) {
@@ -168,7 +235,6 @@ export default function MiPerfil() {
             ? new Date(profile.fecha_inicio_avatar_generico)
             : new Date();
         const prorrogas = Number(profile?.prorrogas_avatar_usadas || 0);
-        // Tramo 0: 7 días | Prórroga 1: +15 días (22) | Prórroga 2 (última): +15 días (37)
         const diasPermitidos = 7 + prorrogas * 15;
         const msTranscurridos = Date.now() - inicio.getTime();
         const diasTranscurridos = Math.floor(msTranscurridos / (1000 * 60 * 60 * 24));
@@ -213,14 +279,14 @@ export default function MiPerfil() {
                 type: 'success',
                 message:
                     actuales + 1 === 1
-                        ? 'Primera prórroga de 15 días activada. Recuerda subir tu fotografía institucional.'
+                        ? 'Primera prórroga de 15 días activada.'
                         : 'Última prórroga de 15 días activada. Al vencer deberás subir tu fotografía obligatoriamente.',
             });
         }
     };
 
     // ============================================================================
-    // CHIPS / TAGS + AUTOCOMPLETE DE ESPECIALIDADES
+    // CHIPS / TAGS + AUTOCOMPLETE ESPECIALIDADES
     // ============================================================================
     const agregarEspecialidadChip = (valorRaw) => {
         const limpio = valorRaw.replace(/,/g, '').trim();
@@ -262,7 +328,7 @@ export default function MiPerfil() {
         }
     };
 
-    const sugerenciasFiltradas = ESPECIALIDADES_SUGERIDAS.filter(
+    const sugerenciasFiltradas = ESPECIALIDADES_CATALOGO.filter(
         (s) =>
             s.nombre.toLowerCase().includes(inputEsp.toLowerCase()) &&
             !form.especialidades.some(
@@ -271,7 +337,7 @@ export default function MiPerfil() {
     );
 
     // ============================================================================
-    // SUBIDA DE FOTOGRAFÍA OFICIAL O SELECCIÓN DE AVATAR GENÉRICO
+    // SUBIDA DE FOTO OFICIAL O AVATAR GENÉRICO POR GÉNERO
     // ============================================================================
     const handleSubirFoto = async (e) => {
         const file = e.target.files?.[0];
@@ -331,14 +397,23 @@ export default function MiPerfil() {
         }));
         setStatus({
             type: 'success',
-            message:
-                'Avatar genérico seleccionado por 7 días. Podrás subir tu fotografía oficial más adelante.',
+            message: `Avatar genérico (${form.genero === 'femenino' ? 'Femenino' : 'Masculino'
+                }) activado por 7 días.`,
         });
     };
 
     const handleGuardarFicha = async (e) => {
         e.preventDefault();
         setStatus({ type: '', message: '' });
+
+        if (!validarRutChileno(form.rut)) {
+            setStatus({
+                type: 'error',
+                message:
+                    'Este RUT no corresponde. Verifica los dígitos y el dígito verificador.',
+            });
+            return;
+        }
 
         if (!form.foto_url && !form.usando_avatar_generico) {
             setStatus({
@@ -356,9 +431,11 @@ export default function MiPerfil() {
 
             const payload = {
                 nombre_completo: form.nombre_completo.trim(),
-                rut: form.rut.trim(),
+                rut: formatearRutChileno(form.rut),
+                genero: form.genero,
                 telefono: form.telefono.trim(),
-                comuna: form.comuna.trim(),
+                region: form.region,
+                comuna: form.comuna,
                 especialidad: textoEspecialidadLegacy,
                 especialidades: form.especialidades,
                 tipo_sangre: form.tipo_sangre,
@@ -441,160 +518,211 @@ export default function MiPerfil() {
     };
 
     // ============================================================================
-    // RENDERIZADO DE CREDENCIAL PNG CON QR + ESPECIALIDADES ABREVIADAS
+    // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL (1012 x 638) SOBRE TUS PLANTILLAS
     // ============================================================================
     useEffect(() => {
-        if (!aprobado || !profile?.codigo_credencial || !canvasRef.current) return;
+        if (!aprobado || !profile?.codigo_credencial) return;
+        if (!canvasFrenteRef.current || !canvasReversoRef.current) return;
 
-        const renderizarCredencial = async () => {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            const W = 638;
-            const H = 1012;
-            canvas.width = W;
-            canvas.height = H;
-
-            const plantilla = new Image();
-            plantilla.crossOrigin = 'anonymous';
-            plantilla.src = '/credencial-plantilla.png';
-
-            await new Promise((resolve) => {
-                plantilla.onload = () => {
-                    ctx.drawImage(plantilla, 0, 0, W, H);
-                    resolve();
+        const cargarImagen = (src, fallbackSrc) =>
+            new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => {
+                    if (fallbackSrc) {
+                        const fb = new Image();
+                        fb.onload = () => resolve(fb);
+                        fb.onerror = () => resolve(null);
+                        fb.src = fallbackSrc;
+                    } else {
+                        resolve(null);
+                    }
                 };
-                plantilla.onerror = () => {
-                    ctx.fillStyle = '#0A0A0A';
-                    ctx.fillRect(0, 0, W, H);
-                    ctx.fillStyle = '#D90429';
-                    ctx.fillRect(0, 0, W, 175);
-                    ctx.fillStyle = '#F2B632';
-                    ctx.fillRect(0, 175, W, 12);
-
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '900 32px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('O.N.G. BRE BÍO-BÍO', W / 2, 75);
-                    ctx.font = '700 18px sans-serif';
-                    ctx.fillText('BÚSQUEDA Y RESCATE EN EMERGENCIAS', W / 2, 115);
-
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(36, 215, W - 72, H - 255);
-                    resolve();
-                };
+                img.src = src;
             });
 
-            const fotoW = 210;
-            const fotoH = 240;
-            const fotoX = (W - fotoW) / 2;
-            const fotoY = 235;
+        const renderizarAmbasCaras = async () => {
+            const W = 1012;
+            const H = 638;
 
-            const srcFoto = profile.foto_url || AVATAR_GENERICO_SVG;
-            const avatarImg = new Image();
-            avatarImg.crossOrigin = 'anonymous';
-            avatarImg.src = srcFoto;
+            // -------------------- 1. CARA FRONTAL --------------------
+            const cFrente = canvasFrenteRef.current;
+            const ctxF = cFrente.getContext('2d');
+            cFrente.width = W;
+            cFrente.height = H;
 
-            await new Promise((resolve) => {
-                avatarImg.onload = () => {
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.roundRect(fotoX, fotoY, fotoW, fotoH, 16);
-                    ctx.clip();
-                    ctx.drawImage(avatarImg, fotoX, fotoY, fotoW, fotoH);
-                    ctx.restore();
-                    ctx.strokeStyle = '#0A0A0A';
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(fotoX, fotoY, fotoW, fotoH);
-                    resolve();
-                };
-                avatarImg.onerror = () => resolve();
-            });
+            const imgBaseFrente = await cargarImagen('/credencial-frente.png');
+            if (imgBaseFrente) {
+                ctxF.drawImage(imgBaseFrente, 0, 0, W, H);
+            } else {
+                ctxF.fillStyle = '#F3F4F6';
+                ctxF.fillRect(0, 0, W, H);
+                ctxF.fillStyle = '#B91C1C';
+                ctxF.fillRect(340, 195, W - 340, 82);
+                ctxF.fillStyle = '#111827';
+                ctxF.fillRect(0, 515, W, 123);
+            }
 
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#0A0A0A';
-            ctx.font = '900 28px sans-serif';
-            ctx.fillText(
-                (profile.nombre_completo || 'VOLUNTARIO BRE').toUpperCase(),
-                W / 2,
-                525
+            // Fotografía del Voluntario en el recuadro izquierdo (X: 35, Y: 72, W: 300, H: 400)
+            const fotoSrc =
+                profile.foto_url || obtenerAvatarGenericoUrl(form.genero);
+            const imgFoto = await cargarImagen(
+                fotoSrc,
+                RESPALDO_AVATAR_SVG(form.genero)
+            );
+            if (imgFoto) {
+                ctxF.save();
+                ctxF.beginPath();
+                ctxF.roundRect(35, 72, 300, 400, 18);
+                ctxF.clip();
+                ctxF.drawImage(imgFoto, 35, 72, 300, 400);
+                ctxF.restore();
+            }
+
+            // Franja Roja: Rol o Cargo Principal (ej. VOLUNTARIO / DIRECTOR OPERATIVO)
+            const cargosLista = Array.isArray(profile.cargos_operativos)
+                ? profile.cargos_operativos
+                : [];
+            const tituloFranjaRoja =
+                cargosLista.includes('do')
+                    ? 'DIRECTOR OPERATIVO'
+                    : rol === 'director'
+                        ? 'DIRECTOR GENERAL'
+                        : rol.toUpperCase();
+
+            ctxF.fillStyle = '#FFFFFF';
+            ctxF.textAlign = 'left';
+            ctxF.font = '900 42px sans-serif';
+            ctxF.fillText(tituloFranjaRoja, 412, 250, 440);
+
+            // Nombre Completo
+            ctxF.fillStyle = '#111827';
+            ctxF.font = '900 28px sans-serif';
+            ctxF.fillText(
+                (profile.nombre_completo || 'NOMBRE COMPLETO').toUpperCase(),
+                420,
+                345,
+                550
             );
 
-            ctx.fillStyle = '#D90429';
-            ctx.font = '900 24px sans-serif';
-            ctx.fillText(profile.codigo_credencial, W / 2, 565);
-
-            ctx.fillStyle = '#333333';
-            ctx.font = '700 20px sans-serif';
-            ctx.fillText(`RUT: ${profile.rut || 'N/R'}`, W / 2, 602);
-
-            const listaEsp = Array.isArray(profile.especialidades)
-                ? profile.especialidades
-                : profile.especialidad
-                    ? [profile.especialidad]
-                    : [];
-            const espFormateada = abreviarEspecialidadesParaCredencial(listaEsp);
-            const textoRol = `${rol.toUpperCase()}${espFormateada ? ` · ${espFormateada}` : ''
-                }`;
-
-            ctx.fillStyle = '#0A0A0A';
-            ctx.font = '800 16px sans-serif';
-            ctx.fillText(textoRol, W / 2, 638, W - 96);
-
-            ctx.fillStyle = '#B91C1C';
-            ctx.font = '900 18px sans-serif';
-            ctx.fillText(
-                `GRUPO SANGUÍNEO: ${profile.tipo_sangre || 'N/R'}`,
-                W / 2,
-                672
+            // RUT Formateado
+            ctxF.font = '900 26px sans-serif';
+            ctxF.fillText(
+                formatearRutChileno(profile.rut) || '12.345.678-9',
+                420,
+                418
             );
 
+            // Función / Área
+            const espResumen = abreviarEspecialidadesParaCredencial(
+                form.especialidades
+            );
+            ctxF.font = '900 23px sans-serif';
+            ctxF.fillText(espResumen, 420, 488, 550);
+
+            // Barra Inferior Negra: ID Institucional + Emisión + Vigencia
+            const fechaEmision = profile.creado_en
+                ? new Date(profile.creado_en)
+                : new Date();
+            const fechaVigencia = new Date(fechaEmision);
+            fechaVigencia.setFullYear(fechaVigencia.getFullYear() + 2);
+
+            const fmtFecha = (d) =>
+                `${String(d.getDate()).padStart(2, '0')}-${String(
+                    d.getMonth() + 1
+                ).padStart(2, '0')}-${d.getFullYear()}`;
+
+            ctxF.fillStyle = '#FFFFFF';
+            ctxF.font = '900 28px sans-serif';
+            ctxF.fillText(profile.codigo_credencial, 92, 588);
+
+            ctxF.font = '800 23px sans-serif';
+            ctxF.fillText(fmtFecha(fechaEmision), 395, 588);
+            ctxF.fillText(fmtFecha(fechaVigencia), 585, 588);
+
+            // -------------------- 2. CARA TRASERA --------------------
+            const cReverso = canvasReversoRef.current;
+            const ctxR = cReverso.getContext('2d');
+            cReverso.width = W;
+            cReverso.height = H;
+
+            const imgBaseReverso = await cargarImagen('/credencial-reverso.png');
+            if (imgBaseReverso) {
+                ctxR.drawImage(imgBaseReverso, 0, 0, W, H);
+            } else {
+                ctxR.fillStyle = '#F3F4F6';
+                ctxR.fillRect(0, 0, W, H);
+                ctxR.fillStyle = '#B91C1C';
+                ctxR.fillRect(720, 0, 292, 515);
+                ctxR.fillStyle = '#111827';
+                ctxR.fillRect(0, 515, W, 123);
+            }
+
+            // Grupo Sanguíneo (Arriba a la derecha bajo "GRUPO SANGUINEO")
+            ctxR.fillStyle = '#FFFFFF';
+            ctxR.textAlign = 'center';
+            ctxR.font = '900 38px sans-serif';
+            const gsTexto =
+                form.tipo_sangre && form.tipo_sangre !== 'No especificado'
+                    ? form.tipo_sangre
+                    : 'N/E';
+            ctxR.fillText(gsTexto, 868, 145);
+
+            // Caja Gris 1: Especialidad (X: 142, Y: 255, W: 455)
+            ctxR.fillStyle = '#111827';
+            ctxR.textAlign = 'left';
+            ctxR.font = '800 20px sans-serif';
+            const textoEspReverso =
+                form.especialidades.length > 0
+                    ? abreviarEspecialidadesParaCredencial(form.especialidades)
+                    : 'BÚSQUEDA Y RESCATE EN EMERGENCIAS';
+            ctxR.fillText(textoEspReverso, 158, 296, 440);
+
+            // Caja Gris 2: Antecedentes Médicos - Alergias (X: 142, Y: 392, W: 455)
+            ctxR.font = '800 19px sans-serif';
+            const textoAlergias = (form.alergias || 'SIN ANTECEDENTES RELEVANTES').toUpperCase();
+            ctxR.fillText(textoAlergias, 158, 434, 440);
+
+            // Código QR dentro del recuadro blanco con borde rojo (X: 702, Y: 192, Size: 278)
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
                 profile.codigo_credencial
             )}`;
             const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
-                width: 210,
+                width: 265,
                 margin: 1,
                 color: { dark: '#0A0A0A', light: '#FFFFFF' },
             });
 
-            const qrImg = new Image();
-            qrImg.src = qrDataUrl;
-            await new Promise((resolve) => {
-                qrImg.onload = () => {
-                    const qrSize = 195;
-                    ctx.drawImage(qrImg, (W - qrSize) / 2, 705, qrSize, qrSize);
-                    resolve();
-                };
-            });
-
-            ctx.fillStyle = '#525252';
-            ctx.font = '700 13px sans-serif';
-            ctx.fillText(
-                'ESCANEAR PARA VALIDACIÓN OFICIAL EN TERRENO',
-                W / 2,
-                925
-            );
+            const imgQr = await cargarImagen(qrDataUrl);
+            if (imgQr) {
+                ctxR.drawImage(imgQr, 710, 198, 264, 264);
+            }
 
             setCredencialLista(true);
         };
 
-        renderizarCredencial();
-    }, [aprobado, profile, rol]);
+        renderizarAmbasCaras();
+    }, [aprobado, profile, rol, form]);
 
-    const descargarCredencialPNG = () => {
-        if (!canvasRef.current) return;
+    const descargarPNG = (lado) => {
+        const canvas =
+            lado === 'frente' ? canvasFrenteRef.current : canvasReversoRef.current;
+        if (!canvas) return;
         const enlace = document.createElement('a');
-        enlace.download = `Credencial_${profile?.codigo_credencial || 'BRE_BIOBIO'
+        enlace.download = `Credencial_${lado.toUpperCase()}_${profile?.codigo_credencial || 'BRE'
             }.png`;
-        enlace.href = canvasRef.current.toDataURL('image/png');
+        enlace.href = canvas.toDataURL('image/png');
         enlace.click();
     };
 
-    // Componente reutilizable del Selector de Especialidades con Chips + Autocomplete
+    // ============================================================================
+    // SELECTOR ESPECIALIDADES CHIPS + AUTOCOMPLETE
+    // ============================================================================
     const renderSelectorEspecialidades = () => (
         <div className="relative sm:col-span-2">
             <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                Especialidades (Escribe y presiona Espacio, Coma o Enter)
+                Especialidades Operativas y Administrativas (Espacio, Coma o Enter)
             </label>
             <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 py-2 focus-within:border-[#0A0A0A]">
                 {form.especialidades.map((esp) => (
@@ -624,15 +752,15 @@ export default function MiPerfil() {
                     onKeyDown={handleKeyDownEspecialidad}
                     placeholder={
                         form.especialidades.length === 0
-                            ? 'Ej. Búsqueda Agreste, Primeros Auxilios...'
-                            : 'Agregar otra...'
+                            ? 'Ej. USAR, Búsqueda Agreste, RPAS/Drone, Administración...'
+                            : 'Agregar otra especialidad...'
                     }
-                    className="min-w-[160px] flex-1 bg-transparent text-sm font-semibold outline-none"
+                    className="min-w-[180px] flex-1 bg-transparent text-sm font-semibold outline-none"
                 />
             </div>
 
             {mostrarSugerencias && sugerenciasFiltradas.length > 0 && (
-                <div className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
                     {sugerenciasFiltradas.map((sug) => (
                         <button
                             key={sug.nombre}
@@ -652,66 +780,77 @@ export default function MiPerfil() {
     );
 
     // ============================================================================
-    // BANNER DE ALERTA / PRÓRROGA DE FOTOGRAFÍA INSTITUCIONAL
+    // ALERTAS PERSISTENTES: FOTOGRAFÍA Y GRUPO SANGUÍNEO
     // ============================================================================
-    const renderBannerFotografia = () => {
-        if (!estadoAvatar.requiereFoto) return null;
+    const renderBannersRecordatorio = () => (
+        <div className="mb-6 space-y-3">
+            {faltaGrupoSanguineo && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-l-4 border-[#D90429] bg-red-50 p-4 text-xs text-red-950 shadow-sm">
+                    <p className="flex items-center gap-2 font-black uppercase">
+                        <HeartPulse size={17} className="shrink-0 text-[#D90429]" />
+                        Recordatorio Médico: Tu Grupo Sanguíneo figura como &ldquo;No
+                        especificado&rdquo;. Selecciona tu grupo real en tu ficha para
+                        respaldo en emergencias.
+                    </p>
+                </div>
+            )}
 
-        return (
-            <div
-                className={`mb-6 rounded-2xl border-l-4 p-4 shadow-sm ${estadoAvatar.vencido
-                        ? 'border-[#D90429] bg-red-50 text-red-950'
-                        : 'border-amber-500 bg-amber-50 text-amber-950'
-                    }`}
-            >
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <div className="space-y-1">
-                        <p className="flex items-center gap-1.5 text-xs font-black uppercase">
-                            <ShieldAlert
-                                size={16}
-                                className={
-                                    estadoAvatar.vencido ? 'text-[#D90429]' : 'text-amber-600'
-                                }
-                            />
-                            {estadoAvatar.vencido
-                                ? 'Plazo Vencido: Debes actualizar tu fotografía institucional'
-                                : `Avatar Genérico Activo · ${estadoAvatar.etapa} (${estadoAvatar.diasRestantes} días restantes)`}
-                        </p>
-                        <p className="text-xs font-medium">
-                            {estadoAvatar.vencido && !estadoAvatar.puedeProrrogar
-                                ? 'Ya utilizaste el plazo inicial de 7 días y tus dos prórrogas de 15 días. Este aviso permanecerá activo hasta que subas tu fotografía oficial.'
-                                : 'Puedes seguir editando tus datos personales, pero recuerda cargar tu fotografía formal o con uniforme institucional.'}
-                        </p>
-                    </div>
+            {estadoAvatar.requiereFoto && (
+                <div
+                    className={`rounded-2xl border-l-4 p-4 shadow-sm ${estadoAvatar.vencido
+                            ? 'border-[#D90429] bg-red-50 text-red-950'
+                            : 'border-amber-500 bg-amber-50 text-amber-950'
+                        }`}
+                >
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                        <div className="space-y-1">
+                            <p className="flex items-center gap-1.5 text-xs font-black uppercase">
+                                <ShieldAlert
+                                    size={16}
+                                    className={
+                                        estadoAvatar.vencido ? 'text-[#D90429]' : 'text-amber-600'
+                                    }
+                                />
+                                {estadoAvatar.vencido
+                                    ? 'Plazo Vencido: Debes actualizar tu fotografía institucional'
+                                    : `Avatar Genérico Activo · ${estadoAvatar.etapa} (${estadoAvatar.diasRestantes} días restantes)`}
+                            </p>
+                            <p className="text-xs font-medium">
+                                {estadoAvatar.vencido && !estadoAvatar.puedeProrrogar
+                                    ? 'Se agotaron los 7 días iniciales y las dos prórrogas de 15 días. Este mensaje permanecerá activo hasta que subas tu fotografía oficial.'
+                                    : 'Puedes actualizar tus datos libremente, pero recuerda subir tu fotografía formal o con uniforme.'}
+                            </p>
+                        </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#D90429] px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-red-700">
-                            <Camera size={14} />
-                            <span>{uploadingFoto ? 'Subiendo...' : 'Subir Foto Ahora'}</span>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleSubirFoto}
-                                className="hidden"
-                            />
-                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#D90429] px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-red-700">
+                                <Camera size={14} />
+                                <span>{uploadingFoto ? 'Subiendo...' : 'Subir Foto Ahora'}</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleSubirFoto}
+                                    className="hidden"
+                                />
+                            </label>
 
-                        {estadoAvatar.puedeProrrogar && (
-                            <button
-                                type="button"
-                                onClick={handleExtenderProrrogaAvatar}
-                                className="rounded-xl border border-neutral-800 bg-[#0A0A0A] px-3.5 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
-                            >
-                                {estadoAvatar.prorrogas === 0
-                                    ? 'Solicitar Prórroga (+15 días)'
-                                    : 'Última Prórroga (+15 días)'}
-                            </button>
-                        )}
+                            {estadoAvatar.puedeProrrogar && (
+                                <button
+                                    type="button"
+                                    onClick={handleExtenderProrrogaAvatar}
+                                    className="rounded-xl border border-neutral-800 bg-[#0A0A0A] px-3.5 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
+                                >
+                                    {estadoAvatar.prorrogas === 0
+                                        ? 'Solicitar Prórroga (+15 días)'
+                                        : 'Última Prórroga (+15 días)'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
-        );
-    };
+            )}
+        </div>
+    );
 
     // ============================================================================
     // VISTA 1: ONBOARDING OBLIGATORIO DE PRIMER INGRESO
@@ -730,11 +869,6 @@ export default function MiPerfil() {
                         <h2 className="mt-2 text-xl font-black uppercase text-neutral-950">
                             Antecedentes Personales y Fotografía
                         </h2>
-                        <p className="mt-1 text-xs font-medium text-neutral-600">
-                            Sube tu fotografía institucional o elige el{' '}
-                            <strong>Avatar Genérico Provisorio (7 días)</strong> mientras
-                            obtienes tu foto oficial.
-                        </p>
                     </div>
 
                     {status.message && (
@@ -751,30 +885,24 @@ export default function MiPerfil() {
                     <form onSubmit={handleGuardarFicha} className="space-y-5">
                         <div className="flex flex-col items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-5 sm:flex-row">
                             <div className="flex h-28 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white">
-                                {form.foto_url ? (
-                                    <img
-                                        src={form.foto_url}
-                                        alt="Foto perfil"
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : form.usando_avatar_generico ? (
-                                    <img
-                                        src={AVATAR_GENERICO_SVG}
-                                        alt="Avatar genérico"
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : (
-                                    <User size={36} className="text-neutral-300" />
-                                )}
+                                <img
+                                    src={
+                                        form.foto_url ||
+                                        (form.usando_avatar_generico
+                                            ? obtenerAvatarGenericoUrl(form.genero)
+                                            : RESPALDO_AVATAR_SVG(form.genero))
+                                    }
+                                    onError={(e) => {
+                                        e.currentTarget.src = RESPALDO_AVATAR_SVG(form.genero);
+                                    }}
+                                    alt="Avatar"
+                                    className="h-full w-full object-cover"
+                                />
                             </div>
                             <div className="space-y-2 text-center sm:text-left">
                                 <h3 className="text-xs font-black uppercase text-neutral-900">
-                                    Fotografía para Credencial
+                                    Fotografía o Avatar Genérico Provisorio (7 días)
                                 </h3>
-                                <p className="text-xs text-neutral-500">
-                                    Puedes subir tu foto ahora o usar el avatar genérico por 7
-                                    días.
-                                </p>
                                 <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
                                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800">
                                         <Camera size={15} />
@@ -821,15 +949,42 @@ export default function MiPerfil() {
 
                             <div>
                                 <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                                    RUT (Ej. 19082512-4)
+                                    RUT Chileno
                                 </label>
                                 <input
                                     type="text"
                                     required
                                     value={form.rut}
-                                    onChange={(e) => setForm({ ...form, rut: e.target.value })}
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2.5 text-sm font-semibold"
+                                    onChange={(e) =>
+                                        setForm({ ...form, rut: formatearRutChileno(e.target.value) })
+                                    }
+                                    placeholder="19.082.512-4"
+                                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold ${!rutValido
+                                            ? 'border-[#D90429] bg-red-50 text-red-900'
+                                            : 'border-neutral-300'
+                                        }`}
                                 />
+                                {!rutValido && (
+                                    <p className="mt-1 text-[11px] font-black text-[#D90429]">
+                                        Este RUT no corresponde. Reintenta verificando el número.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
+                                    Sexo / Avatar Genérico
+                                </label>
+                                <select
+                                    value={form.genero}
+                                    onChange={(e) =>
+                                        setForm({ ...form, genero: e.target.value })
+                                    }
+                                    className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-bold"
+                                >
+                                    <option value="masculino">Masculino</option>
+                                    <option value="femenino">Femenino</option>
+                                </select>
                             </div>
 
                             <div>
@@ -843,21 +998,53 @@ export default function MiPerfil() {
                                     onChange={(e) =>
                                         setForm({ ...form, telefono: e.target.value })
                                     }
+                                    placeholder="+56 9 1234 5678"
                                     className="w-full rounded-xl border border-neutral-300 px-3.5 py-2.5 text-sm font-semibold"
                                 />
                             </div>
 
                             <div>
                                 <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                                    Comuna de Residencia
+                                    Región
                                 </label>
-                                <input
-                                    type="text"
-                                    required
+                                <select
+                                    value={form.region}
+                                    onChange={(e) => {
+                                        const nuevaReg = e.target.value;
+                                        const primeraComuna =
+                                            REGIONES_CHILE.find((r) => r.region === nuevaReg)
+                                                ?.comunas?.[0] || '';
+                                        setForm({
+                                            ...form,
+                                            region: nuevaReg,
+                                            comuna: primeraComuna,
+                                        });
+                                    }}
+                                    className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-bold"
+                                >
+                                    {REGIONES_CHILE.map((r) => (
+                                        <option key={r.region} value={r.region}>
+                                            {r.region}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
+                                    Comuna
+                                </label>
+                                <select
                                     value={form.comuna}
                                     onChange={(e) => setForm({ ...form, comuna: e.target.value })}
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2.5 text-sm font-semibold"
-                                />
+                                    className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-bold"
+                                >
+                                    {comunasDisponibles.map((c) => (
+                                        <option key={c} value={c}>
+                                            {c}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>
@@ -871,13 +1058,21 @@ export default function MiPerfil() {
                                     }
                                     className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-bold"
                                 >
-                                    {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(
-                                        (gs) => (
-                                            <option key={gs} value={gs}>
-                                                {gs}
-                                            </option>
-                                        )
-                                    )}
+                                    {[
+                                        'No especificado',
+                                        'O+',
+                                        'O-',
+                                        'A+',
+                                        'A-',
+                                        'B+',
+                                        'B-',
+                                        'AB+',
+                                        'AB-',
+                                    ].map((gs) => (
+                                        <option key={gs} value={gs}>
+                                            {gs}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -937,7 +1132,7 @@ export default function MiPerfil() {
 
                         <button
                             type="submit"
-                            disabled={saving}
+                            disabled={saving || !rutValido}
                             className="w-full rounded-xl bg-[#D90429] py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-lg hover:bg-red-700 disabled:opacity-50"
                         >
                             {saving
@@ -951,7 +1146,7 @@ export default function MiPerfil() {
     }
 
     // ============================================================================
-    // VISTA 2: SALA DE ESPERA INSTITUCIONAL (Perfil aún no autorizado)
+    // VISTA 2: SALA DE ESPERA INSTITUCIONAL
     // ============================================================================
     if (!aprobado) {
         return (
@@ -959,7 +1154,7 @@ export default function MiPerfil() {
                 title="Estado de Postulación"
                 subtitle="Verificación de antecedentes por el Directorio O.N.G. BRE Bío-Bío"
             >
-                {renderBannerFotografia()}
+                {renderBannersRecordatorio()}
                 <div className="mx-auto max-w-xl rounded-2xl border-2 border-[#F2B632] bg-[#0A0A0A] p-8 text-center text-white shadow-2xl">
                     <Clock
                         size={52}
@@ -984,12 +1179,12 @@ export default function MiPerfil() {
     }
 
     // ============================================================================
-    // VISTA 3: PERFIL COMPLETO + CREDENCIAL PNG CON QR + CERTIFICADOS
+    // VISTA 3: PERFIL COMPLETO + CREDENCIAL DOBLE CARA + CERTIFICADOS
     // ============================================================================
     return (
         <DashboardLayout
             title="Mi Ficha y Credencial"
-            subtitle="Identificación oficial BRE Bío-Bío, código QR fiscalizable y hoja de vida"
+            subtitle="Identificación oficial BRE Bío-Bío doble cara, QR fiscalizable y hoja de vida"
             actions={
                 profile?.codigo_credencial && (
                     <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3.5 py-2 text-xs font-black tracking-wider text-[#F2B632]">
@@ -998,7 +1193,7 @@ export default function MiPerfil() {
                 )
             }
         >
-            {renderBannerFotografia()}
+            {renderBannersRecordatorio()}
 
             {status.message && (
                 <div
@@ -1012,309 +1207,417 @@ export default function MiPerfil() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-                {/* Columna Izquierda: Vista Previa y Descarga de Credencial PNG + QR */}
-                <div className="space-y-4">
-                    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-                        <h2 className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
-                            <BadgeCheck size={17} className="text-[#D90429]" /> Credencial
-                            Institucional Digital
-                        </h2>
+            {/* SECCIÓN SUPERIOR: CREDENCIAL HORIZONTAL DOBLE CARA */}
+            <div className="mb-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                        <CreditCard size={18} className="text-[#D90429]" /> Credencial
+                        Institucional Digital (Doble Cara)
+                    </h2>
 
-                        <div className="overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-neutral-900 shadow-lg">
-                            <canvas
-                                ref={canvasRef}
-                                className="mx-auto block h-auto w-full max-w-[300px]"
-                            />
-                        </div>
-
+                    <div className="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
-                            disabled={!credencialLista}
-                            onClick={descargarCredencialPNG}
-                            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#D90429] px-4 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-red-700 disabled:opacity-50"
+                            onClick={() => setLadoCredencial('frente')}
+                            className={`rounded-xl px-3.5 py-1.5 text-xs font-black uppercase ${ladoCredencial === 'frente'
+                                    ? 'bg-[#0A0A0A] text-[#F2B632]'
+                                    : 'border border-neutral-300 text-neutral-700'
+                                }`}
                         >
-                            <Download size={16} strokeWidth={2.5} /> Descargar Credencial PNG
+                            Vista Frontal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setLadoCredencial('reverso')}
+                            className={`rounded-xl px-3.5 py-1.5 text-xs font-black uppercase ${ladoCredencial === 'reverso'
+                                    ? 'bg-[#0A0A0A] text-[#F2B632]'
+                                    : 'border border-neutral-300 text-neutral-700'
+                                }`}
+                        >
+                            Vista Trasera (QR y Salud)
                         </button>
                     </div>
                 </div>
 
-                {/* Columna Derecha (2/3): Edición de Ficha + Certificados */}
-                <div className="space-y-6 lg:col-span-2">
-                    <form
-                        onSubmit={handleGuardarFicha}
-                        className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
-                    >
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="h-16 w-16 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-neutral-100">
-                                    <img
-                                        src={form.foto_url || AVATAR_GENERICO_SVG}
-                                        alt="Avatar"
-                                        className="h-full w-full object-cover"
+                <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-3">
+                    <div className="overflow-hidden rounded-2xl border-2 border-[#0A0A0A] bg-neutral-900 shadow-lg lg:col-span-2">
+                        <canvas
+                            ref={canvasFrenteRef}
+                            className={`h-auto w-full ${ladoCredencial === 'frente' ? 'block' : 'hidden'
+                                }`}
+                        />
+                        <canvas
+                            ref={canvasReversoRef}
+                            className={`h-auto w-full ${ladoCredencial === 'reverso' ? 'block' : 'hidden'
+                                }`}
+                        />
+                    </div>
+
+                    <div className="space-y-3">
+                        <p className="text-xs font-medium leading-relaxed text-neutral-600">
+                            Descarga ambas caras de tu credencial oficial en alta resolución
+                            para impresión PVC o porte digital en terreno.
+                        </p>
+                        <button
+                            type="button"
+                            disabled={!credencialLista}
+                            onClick={() => descargarPNG('frente')}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#D90429] px-4 py-3 text-xs font-black uppercase tracking-wider text-white shadow hover:bg-red-700 disabled:opacity-50"
+                        >
+                            <Download size={15} /> Descargar PNG Frente
+                        </button>
+                        <button
+                            type="button"
+                            disabled={!credencialLista}
+                            onClick={() => descargarPNG('reverso')}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-3 text-xs font-black uppercase tracking-wider text-[#F2B632] shadow hover:bg-neutral-800 disabled:opacity-50"
+                        >
+                            <Download size={15} /> Descargar PNG Reverso (QR)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* SECCIÓN INFERIOR: FICHA PERSONAL + CERTIFICADOS */}
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                <form
+                    onSubmit={handleGuardarFicha}
+                    className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2"
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="h-16 w-16 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-neutral-100">
+                                <img
+                                    src={form.foto_url || obtenerAvatarGenericoUrl(form.genero)}
+                                    onError={(e) => {
+                                        e.currentTarget.src = RESPALDO_AVATAR_SVG(form.genero);
+                                    }}
+                                    alt="Avatar"
+                                    className="h-full w-full object-cover"
+                                />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-neutral-950">
+                                    {form.nombre_completo}
+                                </h3>
+                                <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-1 text-[11px] font-black uppercase text-neutral-800 hover:bg-neutral-200">
+                                    <Camera size={13} />
+                                    {uploadingFoto ? 'Subiendo...' : 'Subir / Cambiar Foto'}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleSubirFoto}
+                                        className="hidden"
                                     />
-                                </div>
-                                <div>
-                                    <h3 className="font-black text-neutral-950">
-                                        {form.nombre_completo}
-                                    </h3>
-                                    <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-1 text-[11px] font-black uppercase text-neutral-800 hover:bg-neutral-200">
-                                        <Camera size={13} />
-                                        {uploadingFoto ? 'Subiendo...' : 'Subir / Cambiar Foto'}
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={handleSubirFoto}
-                                            className="hidden"
-                                        />
-                                    </label>
-                                </div>
+                                </label>
                             </div>
+                        </div>
 
-                            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-xs font-black uppercase">
-                                <input
-                                    type="checkbox"
-                                    checked={form.disponible_operativo}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            disponible_operativo: e.target.checked,
-                                        })
-                                    }
-                                    className="h-4 w-4 rounded text-emerald-600"
-                                />
-                                <span
-                                    className={
-                                        form.disponible_operativo
-                                            ? 'text-emerald-700'
-                                            : 'text-neutral-500'
-                                    }
-                                >
-                                    {form.disponible_operativo
-                                        ? 'Disponible para Llamado'
-                                        : 'No Disponible Temporalmente'}
-                                </span>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-xs font-black uppercase">
+                            <input
+                                type="checkbox"
+                                checked={form.disponible_operativo}
+                                onChange={(e) =>
+                                    setForm({
+                                        ...form,
+                                        disponible_operativo: e.target.checked,
+                                    })
+                                }
+                                className="h-4 w-4 rounded text-emerald-600"
+                            />
+                            <span
+                                className={
+                                    form.disponible_operativo
+                                        ? 'text-emerald-700'
+                                        : 'text-neutral-500'
+                                }
+                            >
+                                {form.disponible_operativo
+                                    ? 'Disponible para Llamado'
+                                    : 'No Disponible Temporalmente'}
+                            </span>
+                        </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Nombre Completo
                             </label>
+                            <input
+                                type="text"
+                                required
+                                value={form.nombre_completo}
+                                onChange={(e) =>
+                                    setForm({ ...form, nombre_completo: e.target.value })
+                                }
+                                className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
+                            />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Nombre Completo
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={form.nombre_completo}
-                                    onChange={(e) =>
-                                        setForm({ ...form, nombre_completo: e.target.value })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    RUT
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={form.rut}
-                                    onChange={(e) => setForm({ ...form, rut: e.target.value })}
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Teléfono
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={form.telefono}
-                                    onChange={(e) =>
-                                        setForm({ ...form, telefono: e.target.value })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Comuna
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.comuna}
-                                    onChange={(e) => setForm({ ...form, comuna: e.target.value })}
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Grupo Sanguíneo
-                                </label>
-                                <select
-                                    value={form.tipo_sangre}
-                                    onChange={(e) =>
-                                        setForm({ ...form, tipo_sangre: e.target.value })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-bold"
-                                >
-                                    {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(
-                                        (gs) => (
-                                            <option key={gs} value={gs}>
-                                                {gs}
-                                            </option>
-                                        )
-                                    )}
-                                </select>
-                            </div>
-
-                            {renderSelectorEspecialidades()}
-
-                            <div className="sm:col-span-2">
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Alergias / Antecedentes Médicos
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.alergias}
-                                    onChange={(e) =>
-                                        setForm({ ...form, alergias: e.target.value })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Contacto Emergencia (Nombre)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.contacto_emergencia_nombre}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            contacto_emergencia_nombre: e.target.value,
-                                        })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
-                                    Contacto Emergencia (Teléfono)
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={form.contacto_emergencia_telefono}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            contacto_emergencia_telefono: e.target.value,
-                                        })
-                                    }
-                                    className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
-                                />
-                            </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                RUT Chileno
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                value={form.rut}
+                                onChange={(e) =>
+                                    setForm({ ...form, rut: formatearRutChileno(e.target.value) })
+                                }
+                                className={`w-full rounded-xl border px-3.5 py-2 text-sm font-semibold ${!rutValido
+                                        ? 'border-[#D90429] bg-red-50 text-red-900'
+                                        : 'border-neutral-300'
+                                    }`}
+                            />
+                            {!rutValido && (
+                                <p className="mt-1 text-[11px] font-black text-[#D90429]">
+                                    Este RUT no corresponde. Reintenta verificando el número.
+                                </p>
+                            )}
                         </div>
 
-                        <div className="flex justify-end pt-2">
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Sexo / Avatar Genérico
+                            </label>
+                            <select
+                                value={form.genero}
+                                onChange={(e) => setForm({ ...form, genero: e.target.value })}
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-bold"
+                            >
+                                <option value="masculino">Masculino</option>
+                                <option value="femenino">Femenino</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Teléfono
+                            </label>
+                            <input
+                                type="tel"
+                                value={form.telefono}
+                                onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                                className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Región
+                            </label>
+                            <select
+                                value={form.region}
+                                onChange={(e) => {
+                                    const nuevaReg = e.target.value;
+                                    const primeraComuna =
+                                        REGIONES_CHILE.find((r) => r.region === nuevaReg)
+                                            ?.comunas?.[0] || '';
+                                    setForm({
+                                        ...form,
+                                        region: nuevaReg,
+                                        comuna: primeraComuna,
+                                    });
+                                }}
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-bold"
+                            >
+                                {REGIONES_CHILE.map((r) => (
+                                    <option key={r.region} value={r.region}>
+                                        {r.region}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Comuna
+                            </label>
+                            <select
+                                value={form.comuna}
+                                onChange={(e) => setForm({ ...form, comuna: e.target.value })}
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-sm font-bold"
+                            >
+                                {comunasDisponibles.map((c) => (
+                                    <option key={c} value={c}>
+                                        {c}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Grupo Sanguíneo
+                            </label>
+                            <select
+                                value={form.tipo_sangre}
+                                onChange={(e) =>
+                                    setForm({ ...form, tipo_sangre: e.target.value })
+                                }
+                                className={`w-full rounded-xl border bg-white px-3.5 py-2 text-sm font-bold ${faltaGrupoSanguineo
+                                        ? 'border-amber-500 bg-amber-50'
+                                        : 'border-neutral-300'
+                                    }`}
+                            >
+                                {[
+                                    'No especificado',
+                                    'O+',
+                                    'O-',
+                                    'A+',
+                                    'A-',
+                                    'B+',
+                                    'B-',
+                                    'AB+',
+                                    'AB-',
+                                ].map((gs) => (
+                                    <option key={gs} value={gs}>
+                                        {gs}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {renderSelectorEspecialidades()}
+
+                        <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Alergias / Antecedentes Médicos
+                            </label>
+                            <input
+                                type="text"
+                                value={form.alergias}
+                                onChange={(e) => setForm({ ...form, alergias: e.target.value })}
+                                className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Contacto Emergencia (Nombre)
+                            </label>
+                            <input
+                                type="text"
+                                value={form.contacto_emergencia_nombre}
+                                onChange={(e) =>
+                                    setForm({
+                                        ...form,
+                                        contacto_emergencia_nombre: e.target.value,
+                                    })
+                                }
+                                className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-xs font-black uppercase text-neutral-600">
+                                Contacto Emergencia (Teléfono)
+                            </label>
+                            <input
+                                type="tel"
+                                value={form.contacto_emergencia_telefono}
+                                onChange={(e) =>
+                                    setForm({
+                                        ...form,
+                                        contacto_emergencia_telefono: e.target.value,
+                                    })
+                                }
+                                className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <button
+                            type="submit"
+                            disabled={saving || !rutValido}
+                            className="inline-flex items-center gap-2 rounded-xl bg-[#0A0A0A] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800 disabled:opacity-50"
+                        >
+                            <Save size={15} />
+                            {saving ? 'Guardando...' : 'Actualizar Mis Antecedentes'}
+                        </button>
+                    </div>
+                </form>
+
+                {/* Certificados */}
+                <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                    <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                        <FileText size={17} className="text-[#D90429]" /> Mis Certificados
+                    </h3>
+
+                    <form
+                        onSubmit={handleSubirCertificado}
+                        className="mb-5 space-y-2.5 rounded-xl border border-neutral-200 bg-neutral-50 p-3.5"
+                    >
+                        <input
+                            type="text"
+                            required
+                            value={nuevoCert.titulo_curso}
+                            onChange={(e) =>
+                                setNuevoCert({ ...nuevoCert, titulo_curso: e.target.value })
+                            }
+                            placeholder="Curso (Ej. Sistema SINAPRED)"
+                            className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
+                        />
+                        <input
+                            type="text"
+                            value={nuevoCert.institucion}
+                            onChange={(e) =>
+                                setNuevoCert({ ...nuevoCert, institucion: e.target.value })
+                            }
+                            placeholder="Institución (SENAPRED)"
+                            className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
+                        />
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="file"
+                                required
+                                accept=".pdf,image/*"
+                                onChange={(e) => setArchivoCert(e.target.files?.[0] || null)}
+                                className="w-full text-[11px]"
+                            />
                             <button
                                 type="submit"
-                                disabled={saving}
-                                className="inline-flex items-center gap-2 rounded-xl bg-[#0A0A0A] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
+                                disabled={subiendoCert}
+                                className="shrink-0 rounded-xl bg-[#D90429] px-3.5 py-2 text-xs font-black uppercase text-white"
                             >
-                                <Save size={15} />
-                                {saving ? 'Guardando...' : 'Actualizar Mis Antecedentes'}
+                                <Upload size={14} />
                             </button>
                         </div>
                     </form>
 
-                    {/* Certificados y Diplomas */}
-                    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
-                            <FileText size={17} className="text-[#D90429]" /> Mis Certificados
-                            y Cursos Aprobados
-                        </h3>
-
-                        <form
-                            onSubmit={handleSubirCertificado}
-                            className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3"
-                        >
-                            <input
-                                type="text"
-                                required
-                                value={nuevoCert.titulo_curso}
-                                onChange={(e) =>
-                                    setNuevoCert({ ...nuevoCert, titulo_curso: e.target.value })
-                                }
-                                placeholder="Nombre del curso (Ej. Sistema SINAPRED)"
-                                className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
-                            />
-                            <input
-                                type="text"
-                                value={nuevoCert.institucion}
-                                onChange={(e) =>
-                                    setNuevoCert({ ...nuevoCert, institucion: e.target.value })
-                                }
-                                placeholder="Institución (SENAPRED)"
-                                className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
-                            />
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="file"
-                                    required
-                                    accept=".pdf,image/*"
-                                    onChange={(e) => setArchivoCert(e.target.files?.[0] || null)}
-                                    className="w-full text-[11px]"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={subiendoCert}
-                                    className="shrink-0 rounded-xl bg-[#D90429] px-3.5 py-2 text-xs font-black uppercase text-white"
+                    <div className="space-y-2">
+                        {certificados.length === 0 ? (
+                            <p className="text-xs font-semibold text-neutral-400">
+                                Aún no has cargado certificados.
+                            </p>
+                        ) : (
+                            certificados.map((c) => (
+                                <div
+                                    key={c.id}
+                                    className="flex items-center justify-between rounded-xl border border-neutral-200 px-3.5 py-2 text-xs"
                                 >
-                                    <Upload size={14} />
-                                </button>
-                            </div>
-                        </form>
-
-                        <div className="space-y-2">
-                            {certificados.length === 0 ? (
-                                <p className="text-xs font-semibold text-neutral-400">
-                                    Aún no has cargado certificados en tu hoja de vida.
-                                </p>
-                            ) : (
-                                certificados.map((c) => (
-                                    <div
-                                        key={c.id}
-                                        className="flex items-center justify-between rounded-xl border border-neutral-200 px-4 py-2.5 text-xs"
-                                    >
-                                        <div>
-                                            <p className="font-black text-neutral-900">
-                                                {c.titulo_curso}
-                                            </p>
-                                            <p className="text-[11px] text-neutral-500">
-                                                {c.institucion}
-                                            </p>
-                                        </div>
-                                        <span
-                                            className={`rounded-lg px-2.5 py-0.5 text-[10px] font-black uppercase ${c.estado_validacion === 'aprobado'
-                                                    ? 'bg-emerald-100 text-emerald-800'
-                                                    : 'bg-amber-100 text-amber-800'
-                                                }`}
-                                        >
-                                            {c.estado_validacion}
-                                        </span>
+                                    <div>
+                                        <p className="font-black text-neutral-900">
+                                            {c.titulo_curso}
+                                        </p>
+                                        <p className="text-[11px] text-neutral-500">
+                                            {c.institucion}
+                                        </p>
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                    <span
+                                        className={`rounded-lg px-2 py-0.5 text-[10px] font-black uppercase ${c.estado_validacion === 'aprobado'
+                                                ? 'bg-emerald-100 text-emerald-800'
+                                                : 'bg-amber-100 text-amber-800'
+                                            }`}
+                                    >
+                                        {c.estado_validacion}
+                                    </span>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
