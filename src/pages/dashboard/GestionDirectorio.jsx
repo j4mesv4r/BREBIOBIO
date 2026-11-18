@@ -95,7 +95,7 @@ export default function GestionDirectorio() {
   const [tab, setTab] = useState('miembros');
   const [certificados, setCertificados] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
-  const [miembros, setMiembros] = useState([]);
+  const [perfiles, setPerfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [alerta, setAlerta] = useState('');
   const [panelAbiertoId, setPanelAbiertoId] = useState(null);
@@ -143,7 +143,7 @@ export default function GestionDirectorio() {
     if (!certsRes.error && certsRes.data) setCertificados(certsRes.data);
     if (!solRes.error && solRes.data) setSolicitudes(solRes.data);
     if (!perfRes.error && perfRes.data) {
-      setMiembros(perfRes.data);
+      setPerfiles(perfRes.data);
     } else if (perfRes.error) {
       setAlerta(`Error cargando perfiles: ${perfRes.error.message}`);
     }
@@ -153,6 +153,17 @@ export default function GestionDirectorio() {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  // Separación estricta entre Miembros Activos y Postulantes
+  const listaMiembros = perfiles.filter(
+    (p) => (p.rol || 'postulante').toLowerCase() !== 'postulante'
+  );
+  const listaPostulantes = perfiles.filter(
+    (p) => (p.rol || 'postulante').toLowerCase() === 'postulante'
+  );
+  const postulantesPendientes = listaPostulantes.filter(
+    (p) => (p.estado_validacion || 'pendiente') === 'pendiente'
+  );
 
   const validarCertificado = async (id, estado) => {
     const { error } = await supabase
@@ -204,7 +215,7 @@ export default function GestionDirectorio() {
 
     if (rolObjetivo === 'postulante') {
       setAlerta(
-        'Un usuario con rol Postulante no puede recibir cargos operativos. Apruébalo primero como Voluntario.'
+        'Un Postulante no puede recibir cargos operativos. Apruébalo o asciéndelo primero a Voluntario.'
       );
       return;
     }
@@ -345,10 +356,395 @@ export default function GestionDirectorio() {
     if (!error) cargarDatos();
   };
 
+  // Tarjeta reutilizable para Miembros Activos y Postulantes
+  const renderTarjetaPersona = (m, esPostulanteTab = false) => {
+    const rolObjetivo = (m.rol || 'postulante').toLowerCase();
+    const cargosMiembro = Array.isArray(m.cargos_operativos)
+      ? m.cargos_operativos
+      : [];
+    const especialidadesLista =
+      Array.isArray(m.especialidades) && m.especialidades.length > 0
+        ? m.especialidades.join(' · ')
+        : m.especialidad || '';
+    const visPublica = m.visibilidad_publica || {
+      foto_url: true,
+      rut: true,
+      especialidad: true,
+      tipo_sangre: true,
+      certificados: true,
+      vigencia: true,
+      telefono: false,
+    };
+
+    const protegidoParaNoSA =
+      !esSA && (rolObjetivo === 'superadmin' || rolObjetivo === 'director');
+
+    const expandido = panelAbiertoId === m.id;
+
+    return (
+      <div
+        key={m.id}
+        className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm"
+      >
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="flex items-start gap-3.5">
+            <div className="h-14 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-300 bg-neutral-100">
+              {m.foto_url ? (
+                <img
+                  src={m.foto_url}
+                  alt={m.nombre_completo}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <User className="m-auto mt-3 text-neutral-400" size={24} />
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-black text-neutral-950">
+                  {m.nombre_completo || m.email || 'Sin nombre'}
+                </h3>
+
+                {m.codigo_credencial && (
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-0.5 text-[11px] font-black tracking-wider text-[#F2B632]">
+                    <BadgeCheck size={13} strokeWidth={2.5} />
+                    {m.codigo_credencial}
+                  </span>
+                )}
+
+                <span
+                  className={`rounded-lg px-2.5 py-0.5 text-[11px] font-black uppercase ${m.estado_validacion === 'aprobado'
+                      ? 'bg-green-100 text-green-700'
+                      : m.estado_validacion === 'rechazado'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                >
+                  {m.estado_validacion || 'pendiente'}
+                </span>
+
+                {!m.onboarding_completado && (
+                  <span className="rounded-lg bg-neutral-200 px-2 py-0.5 text-[10px] font-black uppercase text-neutral-700">
+                    Ficha Incompleta
+                  </span>
+                )}
+
+                {m.es_menor_autorizado && (
+                  <span className="rounded-lg bg-[#F2B632] px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
+                    Menor Autorizado (16-17)
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs font-semibold text-neutral-600">
+                RUT: {m.rut || 'No registrado'} · Tel:{' '}
+                {m.telefono || 'Sin teléfono'}
+                {m.email ? ` · Email: ${m.email}` : ''}
+              </p>
+
+              {!esPostulanteTab && cargosMiembro.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {cargosMiembro.map((cargoKey) => {
+                    const info = CATALOGO_CARGOS.find((c) => c.key === cargoKey);
+                    return (
+                      <span
+                        key={cargoKey}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-[#D90429]"
+                      >
+                        <Award size={12} strokeWidth={2.5} />
+                        {info ? info.label : cargoKey}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {protegidoParaNoSA ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-neutral-100 px-3 py-2 text-xs font-black uppercase text-neutral-600">
+                <Lock size={14} strokeWidth={2.5} /> {rolObjetivo} (Protegido)
+              </span>
+            ) : esPostulanteTab ? (
+              <>
+                {m.estado_validacion !== 'aprobado' && (
+                  <button
+                    onClick={() => validarMiembro(m, 'aprobado', 'postulante')}
+                    title="Autoriza su ingreso como Postulante activo (puede participar como oyente/apoyo)"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-black uppercase text-emerald-800 hover:bg-emerald-100"
+                  >
+                    <CheckCircle size={15} strokeWidth={2.5} /> Autorizar Postulante
+                  </button>
+                )}
+
+                <button
+                  onClick={() => validarMiembro(m, 'aprobado', 'voluntario')}
+                  title="Aprueba y promueve directamente a Voluntario activo"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
+                >
+                  <UserCheck size={15} strokeWidth={2.5} /> Promover a Voluntario
+                </button>
+
+                {m.estado_validacion === 'pendiente' && (
+                  <button
+                    onClick={() => validarMiembro(m, 'rechazado')}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-3 py-2 text-xs font-black uppercase text-white hover:bg-red-700"
+                  >
+                    <XCircle size={15} strokeWidth={2.5} /> Rechazar
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <select
+                  aria-label="Rol del sistema"
+                  value={rolObjetivo}
+                  onChange={(e) => cambiarRolMiembro(m, e.target.value)}
+                  className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase text-neutral-800"
+                >
+                  <option value="postulante">Postulante</option>
+                  <option value="voluntario">Voluntario</option>
+                  {esSA && (
+                    <>
+                      <option value="director">Director (DG)</option>
+                      <option value="superadmin">Superadmin (SA)</option>
+                    </>
+                  )}
+                </select>
+
+                {m.estado_validacion !== 'aprobado' && (
+                  <button
+                    onClick={() => validarMiembro(m, 'aprobado')}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
+                  >
+                    <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
+                  </button>
+                )}
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setPanelAbiertoId(expandido ? null : m.id)}
+              className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
+            >
+              {expandido
+                ? 'Ocultar Ficha'
+                : esPostulanteTab
+                  ? 'Revisar Antecedentes'
+                  : 'Ficha y Cargos'}
+            </button>
+          </div>
+        </div>
+
+        {/* Panel Desplegable: Antecedentes Completos + Cargos + Visibilidad + Foto SA */}
+        {expandido && (
+          <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
+            {/* Antecedentes Completos */}
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
+              <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                <User size={15} strokeWidth={2.5} className="text-[#D90429]" />
+                Ficha Completa de Antecedentes
+              </h4>
+              <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+                <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
+                  <span className="block text-[10px] font-black uppercase text-neutral-400">
+                    Ubicación
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
+                    <MapPin size={13} className="text-[#D90429]" />
+                    {m.region || 'Región del Biobío'} ·{' '}
+                    {m.comuna || 'Sin comuna'}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
+                  <span className="block text-[10px] font-black uppercase text-neutral-400">
+                    Salud y Sangre
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1 font-bold text-red-700">
+                    <HeartPulse size={13} />
+                    Sangre: {m.tipo_sangre || 'No especificado'} · Alergias:{' '}
+                    {m.alergias || 'Ninguna'}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
+                  <span className="block text-[10px] font-black uppercase text-neutral-400">
+                    Contacto Emergencia (ICE)
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
+                    <PhoneCall size={13} className="text-emerald-600" />
+                    {m.contacto_emergencia_nombre || 'N/R'} (
+                    {m.contacto_emergencia_telefono || 'N/R'})
+                  </span>
+                </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-2.5 sm:col-span-3">
+                  <span className="block text-[10px] font-black uppercase text-neutral-400">
+                    Especialidades y Áreas Declaradas
+                  </span>
+                  <span className="mt-0.5 block font-bold text-neutral-800">
+                    {especialidadesLista || 'Sin especialidades registradas'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cargos Operativos (Solo para Miembros Activos, no Postulantes) */}
+            {!esPostulanteTab && (
+              <>
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                      <Award
+                        size={15}
+                        strokeWidth={2.5}
+                        className="text-[#D90429]"
+                      />
+                      Cargos Operativos Acumulables
+                    </h4>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {CATALOGO_CARGOS.map((cargo) => {
+                      const activo = cargosMiembro.includes(cargo.key);
+                      const permitido = puedeAsignarCargo(cargo.key);
+
+                      return (
+                        <button
+                          key={cargo.key}
+                          type="button"
+                          disabled={!permitido}
+                          title={cargo.descripcion}
+                          onClick={() => toggleCargoOperativo(m, cargo.key)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-black transition-all ${activo
+                              ? 'border-[#0A0A0A] bg-[#0A0A0A] text-[#F2B632] shadow-sm'
+                              : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400'
+                            } disabled:cursor-not-allowed disabled:opacity-45`}
+                        >
+                          <span>{cargo.label}</span>
+                          {cargo.unico && (
+                            <span className="rounded bg-red-600 px-1.5 py-0.2 text-[9px] uppercase text-white">
+                              Único
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Visibilidad Pública en QR */}
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                      <Eye
+                        size={15}
+                        strokeWidth={2.5}
+                        className="text-[#D90429]"
+                      />
+                      Datos Públicos Visibles en QR (Fiscalización)
+                    </h4>
+                    {!puedeEditarVisibilidad && (
+                      <span className="text-[10px] font-black uppercase text-neutral-400">
+                        Solo Secretario / DG / SA
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {CAMPOS_VISIBILIDAD.map((campo) => {
+                      const visible = Boolean(visPublica[campo.key]);
+                      return (
+                        <button
+                          key={campo.key}
+                          type="button"
+                          disabled={!puedeEditarVisibilidad}
+                          onClick={() => toggleCampoVisibilidad(m, campo.key)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-black transition-colors ${visible
+                              ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                              : 'border-neutral-300 bg-white text-neutral-400'
+                            } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${visible ? 'bg-emerald-600' : 'bg-neutral-300'
+                              }`}
+                          />
+                          {campo.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Gestión de Fotografía Institucional (Exclusivo Superadmin) */}
+            {esSA && (
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
+                <h4 className="mb-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                  Gestión de Fotografía Institucional (Exclusivo Superadmin)
+                </h4>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="h-20 w-16 shrink-0 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white">
+                    {m.foto_url ? (
+                      <img
+                        src={m.foto_url}
+                        alt={m.nombre_completo}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-center text-[10px] font-black uppercase text-neutral-400">
+                        Sin Foto
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {m.foto_url && (
+                      <a
+                        href={m.foto_url}
+                        download={`Foto_${m.rut || m.id}.png`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
+                      >
+                        <Download size={14} strokeWidth={2.5} /> Descargar Foto
+                        Original
+                      </a>
+                    )}
+
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800">
+                      <Camera size={14} strokeWidth={2.5} />
+                      <span>
+                        {subiendoFotoId === m.id
+                          ? 'Subiendo imagen...'
+                          : 'Subir / Reemplazar Foto con Uniforme'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={subiendoFotoId === m.id}
+                        onChange={(e) =>
+                          handleAdminSubirFotoMiembro(m.id, e.target.files?.[0])
+                        }
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <DashboardLayout
       title="Gestión de Directorio y Cargos"
-      subtitle="Control de los 4 roles institucionales, revisión completa de postulantes y cargos operativos"
+      subtitle="Administración separada de Miembros Activos, Postulantes, Certificados y Solicitudes"
       actions={
         <div className="flex items-center gap-2">
           {cargosActuales.map((c) => (
@@ -381,6 +777,7 @@ export default function GestionDirectorio() {
         </div>
       )}
 
+      {/* Pestañas Separadas: Miembros vs Postulantes vs Certificados vs Solicitudes */}
       <div className="mb-6 flex flex-wrap gap-2 border-b border-neutral-200">
         <button
           onClick={() => setTab('miembros')}
@@ -389,10 +786,24 @@ export default function GestionDirectorio() {
               : 'border-transparent text-neutral-500 hover:text-neutral-900'
             }`}
         >
-          Miembros y Postulantes (
-          {miembros.filter((m) => m.estado_validacion === 'pendiente').length}{' '}
-          pendientes)
+          Miembros Activos ({listaMiembros.length})
         </button>
+
+        <button
+          onClick={() => setTab('postulantes')}
+          className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-colors ${tab === 'postulantes'
+              ? 'border-[#D90429] text-[#D90429]'
+              : 'border-transparent text-neutral-500 hover:text-neutral-900'
+            }`}
+        >
+          <span>Postulantes ({listaPostulantes.length})</span>
+          {postulantesPendientes.length > 0 && (
+            <span className="rounded-full bg-[#D90429] px-2 py-0.5 text-[10px] font-black text-white">
+              {postulantesPendientes.length} por revisar
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => setTab('certificados')}
           className={`border-b-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-colors ${tab === 'certificados'
@@ -402,6 +813,7 @@ export default function GestionDirectorio() {
         >
           Certificados ({certificados.length})
         </button>
+
         <button
           onClick={() => setTab('solicitudes')}
           className={`border-b-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-colors ${tab === 'solicitudes'
@@ -419,394 +831,23 @@ export default function GestionDirectorio() {
         </p>
       ) : tab === 'miembros' ? (
         <div className="space-y-4">
-          {miembros.map((m) => {
-            const rolObjetivo = (m.rol || 'postulante').toLowerCase();
-            const cargosMiembro = Array.isArray(m.cargos_operativos)
-              ? m.cargos_operativos
-              : [];
-            const especialidadesLista =
-              Array.isArray(m.especialidades) && m.especialidades.length > 0
-                ? m.especialidades.join(' · ')
-                : m.especialidad || '';
-            const visPublica = m.visibilidad_publica || {
-              foto_url: true,
-              rut: true,
-              especialidad: true,
-              tipo_sangre: true,
-              certificados: true,
-              vigencia: true,
-              telefono: false,
-            };
-
-            const protegidoParaNoSA =
-              !esSA &&
-              (rolObjetivo === 'superadmin' || rolObjetivo === 'director');
-
-            const expandido = panelAbiertoId === m.id;
-
-            return (
-              <div
-                key={m.id}
-                className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm"
-              >
-                {/* Fila Superior: Identidad + Rol de Sistema + Aprobación */}
-                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                  <div className="flex items-start gap-3.5">
-                    <div className="h-14 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-300 bg-neutral-100">
-                      {m.foto_url ? (
-                        <img
-                          src={m.foto_url}
-                          alt={m.nombre_completo}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <User className="m-auto mt-3 text-neutral-400" size={24} />
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-black text-neutral-950">
-                          {m.nombre_completo || m.email || 'Sin nombre'}
-                        </h3>
-
-                        {m.codigo_credencial && (
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-0.5 text-[11px] font-black tracking-wider text-[#F2B632]">
-                            <BadgeCheck size={13} strokeWidth={2.5} />
-                            {m.codigo_credencial}
-                          </span>
-                        )}
-
-                        <span
-                          className={`rounded-lg px-2.5 py-0.5 text-[11px] font-black uppercase ${m.estado_validacion === 'aprobado'
-                              ? 'bg-green-100 text-green-700'
-                              : m.estado_validacion === 'rechazado'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                        >
-                          {m.estado_validacion || 'pendiente'}
-                        </span>
-
-                        {!m.onboarding_completado && (
-                          <span className="rounded-lg bg-neutral-200 px-2 py-0.5 text-[10px] font-black uppercase text-neutral-700">
-                            Ficha Incompleta
-                          </span>
-                        )}
-
-                        {m.es_menor_autorizado && (
-                          <span className="rounded-lg bg-[#F2B632] px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
-                            Menor Autorizado (16-17)
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-xs font-semibold text-neutral-600">
-                        RUT: {m.rut || 'No registrado'} · Tel:{' '}
-                        {m.telefono || 'Sin teléfono'}
-                        {m.email ? ` · Email: ${m.email}` : ''}
-                      </p>
-
-                      {cargosMiembro.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {cargosMiembro.map((cargoKey) => {
-                            const info = CATALOGO_CARGOS.find(
-                              (c) => c.key === cargoKey
-                            );
-                            return (
-                              <span
-                                key={cargoKey}
-                                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-[#D90429]"
-                              >
-                                <Award size={12} strokeWidth={2.5} />
-                                {info ? info.label : cargoKey}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Controles de Rol y Aprobación */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {protegidoParaNoSA ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-neutral-100 px-3 py-2 text-xs font-black uppercase text-neutral-600">
-                        <Lock size={14} strokeWidth={2.5} /> {rolObjetivo}{' '}
-                        (Protegido)
-                      </span>
-                    ) : (
-                      <>
-                        <select
-                          aria-label="Rol del sistema"
-                          value={rolObjetivo}
-                          onChange={(e) =>
-                            cambiarRolMiembro(m, e.target.value)
-                          }
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase text-neutral-800"
-                        >
-                          <option value="postulante">Postulante</option>
-                          <option value="voluntario">Voluntario</option>
-                          {esSA && (
-                            <>
-                              <option value="director">Director (DG)</option>
-                              <option value="superadmin">
-                                Superadmin (SA)
-                              </option>
-                            </>
-                          )}
-                        </select>
-
-                        {m.estado_validacion !== 'aprobado' && (
-                          <button
-                            onClick={() =>
-                              validarMiembro(
-                                m,
-                                'aprobado',
-                                rolObjetivo === 'postulante'
-                                  ? 'postulante'
-                                  : undefined
-                              )
-                            }
-                            title="Autoriza el ingreso del usuario manteniendo su rol o promoviéndolo"
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
-                          >
-                            <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
-                          </button>
-                        )}
-
-                        {m.estado_validacion === 'pendiente' && (
-                          <button
-                            onClick={() => validarMiembro(m, 'rechazado')}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-red-700"
-                          >
-                            <XCircle size={15} strokeWidth={2.5} /> Rechazar
-                          </button>
-                        )}
-                      </>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPanelAbiertoId(expandido ? null : m.id)
-                      }
-                      className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
-                    >
-                      {expandido ? 'Ocultar Ficha' : 'Ver Ficha y Cargos'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Panel Desplegable: Ficha Completa + Cargos + Visibilidad + Foto Superadmin */}
-                {expandido && (
-                  <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
-                    {/* Bloque 0: Antecedentes Completos */}
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
-                      <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-                        <User size={15} strokeWidth={2.5} className="text-[#D90429]" />
-                        Ficha Completa de Antecedentes (Revisión para Autorización)
-                      </h4>
-                      <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
-                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
-                          <span className="block text-[10px] font-black uppercase text-neutral-400">
-                            Ubicación
-                          </span>
-                          <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
-                            <MapPin size={13} className="text-[#D90429]" />
-                            {m.region || 'Región del Biobío'} · {m.comuna || 'Sin comuna'}
-                          </span>
-                        </div>
-                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
-                          <span className="block text-[10px] font-black uppercase text-neutral-400">
-                            Salud y Sangre
-                          </span>
-                          <span className="mt-0.5 flex items-center gap-1 font-bold text-red-700">
-                            <HeartPulse size={13} />
-                            Sangre: {m.tipo_sangre || 'No especificado'} · Alergias:{' '}
-                            {m.alergias || 'Ninguna'}
-                          </span>
-                        </div>
-                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
-                          <span className="block text-[10px] font-black uppercase text-neutral-400">
-                            Contacto Emergencia (ICE)
-                          </span>
-                          <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
-                            <PhoneCall size={13} className="text-emerald-600" />
-                            {m.contacto_emergencia_nombre || 'N/R'} (
-                            {m.contacto_emergencia_telefono || 'N/R'})
-                          </span>
-                        </div>
-                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5 sm:col-span-3">
-                          <span className="block text-[10px] font-black uppercase text-neutral-400">
-                            Especialidades y Áreas Declaradas
-                          </span>
-                          <span className="mt-0.5 block font-bold text-neutral-800">
-                            {especialidadesLista || 'Sin especialidades registradas'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bloque 1: Asignación de Cargos Operativos Múltiples */}
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-                          <Award
-                            size={15}
-                            strokeWidth={2.5}
-                            className="text-[#D90429]"
-                          />
-                          Cargos Operativos Acumulables
-                        </h4>
-                        {rolObjetivo === 'postulante' && (
-                          <span className="text-[10px] font-black uppercase text-amber-700">
-                            Solo para Voluntarios / Directivos
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {CATALOGO_CARGOS.map((cargo) => {
-                          const activo = cargosMiembro.includes(cargo.key);
-                          const permitido =
-                            rolObjetivo !== 'postulante' &&
-                            puedeAsignarCargo(cargo.key);
-
-                          return (
-                            <button
-                              key={cargo.key}
-                              type="button"
-                              disabled={!permitido}
-                              title={cargo.descripcion}
-                              onClick={() =>
-                                toggleCargoOperativo(m, cargo.key)
-                              }
-                              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-black transition-all ${activo
-                                  ? 'border-[#0A0A0A] bg-[#0A0A0A] text-[#F2B632] shadow-sm'
-                                  : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400'
-                                } disabled:cursor-not-allowed disabled:opacity-45`}
-                            >
-                              <span>{cargo.label}</span>
-                              {cargo.unico && (
-                                <span className="rounded bg-red-600 px-1.5 py-0.2 text-[9px] uppercase text-white">
-                                  Único
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Bloque 2: Visibilidad Pública en Ficha QR */}
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-                          <Eye
-                            size={15}
-                            strokeWidth={2.5}
-                            className="text-[#D90429]"
-                          />
-                          Datos Públicos Visibles en QR (Fiscalización)
-                        </h4>
-                        {!puedeEditarVisibilidad && (
-                          <span className="text-[10px] font-black uppercase text-neutral-400">
-                            Solo Secretario / DG / SA
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {CAMPOS_VISIBILIDAD.map((campo) => {
-                          const visible = Boolean(visPublica[campo.key]);
-                          return (
-                            <button
-                              key={campo.key}
-                              type="button"
-                              disabled={!puedeEditarVisibilidad}
-                              onClick={() =>
-                                toggleCampoVisibilidad(m, campo.key)
-                              }
-                              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-black transition-colors ${visible
-                                  ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                  : 'border-neutral-300 bg-white text-neutral-400'
-                                } disabled:cursor-not-allowed disabled:opacity-50`}
-                            >
-                              <span
-                                className={`h-2 w-2 rounded-full ${visible ? 'bg-emerald-600' : 'bg-neutral-300'
-                                  }`}
-                              />
-                              {campo.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Bloque 3 (Exclusivo Superadmin): Descarga y Reemplazo de Fotografía */}
-                    {esSA && (
-                      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
-                        <h4 className="mb-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-                          Gestión de Fotografía Institucional (Exclusivo Superadmin)
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-4">
-                          <div className="h-20 w-16 shrink-0 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white">
-                            {m.foto_url ? (
-                              <img
-                                src={m.foto_url}
-                                alt={m.nombre_completo}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span className="flex h-full items-center justify-center text-center text-[10px] font-black uppercase text-neutral-400">
-                                Sin Foto
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            {m.foto_url && (
-                              <a
-                                href={m.foto_url}
-                                download={`Foto_${m.rut || m.id}.png`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
-                              >
-                                <Download size={14} strokeWidth={2.5} /> Descargar Foto Original
-                              </a>
-                            )}
-
-                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800">
-                              <Camera size={14} strokeWidth={2.5} />
-                              <span>
-                                {subiendoFotoId === m.id
-                                  ? 'Subiendo imagen...'
-                                  : 'Subir / Reemplazar Foto con Uniforme'}
-                              </span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                disabled={subiendoFotoId === m.id}
-                                onChange={(e) =>
-                                  handleAdminSubirFotoMiembro(
-                                    m.id,
-                                    e.target.files?.[0]
-                                  )
-                                }
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {listaMiembros.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm font-semibold text-neutral-500">
+              No hay miembros activos registrados.
+            </p>
+          ) : (
+            listaMiembros.map((m) => renderTarjetaPersona(m, false))
+          )}
+        </div>
+      ) : tab === 'postulantes' ? (
+        <div className="space-y-4">
+          {listaPostulantes.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm font-semibold text-neutral-500">
+              No hay postulantes registrados en este momento.
+            </p>
+          ) : (
+            listaPostulantes.map((p) => renderTarjetaPersona(p, true))
+          )}
         </div>
       ) : tab === 'certificados' ? (
         <div className="space-y-4">
