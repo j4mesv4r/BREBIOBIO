@@ -1,22 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import QRCode from 'qrcode';
+import JSZip from 'jszip';
 import {
   MapPin,
   Plus,
   AlertCircle,
-  Clock,
-  CheckCircle,
   X,
   Shield,
   Users,
   HeartPulse,
   PhoneCall,
-  UserPlus,
   Trash2,
   Eye,
   Navigation,
@@ -31,6 +29,14 @@ import {
   Printer,
   Check,
   Copy,
+  Search,
+  Layers,
+  Upload,
+  Download,
+  ChevronUp,
+  ChevronDown,
+  RotateCcw,
+  Compass,
 } from 'lucide-react';
 
 const TRIAGE_ESTILOS = {
@@ -62,19 +68,72 @@ const TIPOS_WAYPOINT = [
   { key: 'reunion', label: 'Punto Reunión', color: '#059669' },
 ];
 
+const EQUIPOS_GEOMETRIA = [
+  { key: 'terrestre', label: 'Búsqueda Terrestre', color: '#D90429' },
+  { key: 'drone', label: 'Equipo Drone / RPAS', color: '#2563EB' },
+  { key: 'acuatico', label: 'Equipo Acuático / Buceo', color: '#0891B2' },
+  { key: 'k9', label: 'Unidad Canina K9', color: '#7C3AED' },
+];
+
+function obtenerBadgeOperativo(efectivo) {
+  const rol = (efectivo?.rol || 'voluntario').toLowerCase();
+  const cargos = Array.isArray(efectivo?.cargos_operativos)
+    ? efectivo.cargos_operativos.map((c) => c.toLowerCase())
+    : [];
+
+  if (rol === 'superadmin') return { sigla: 'SA', color: '#0A0A0A', texto: '#F2B632' };
+  if (rol === 'director') return { sigla: 'DG', color: '#991B1B', texto: '#FFFFFF' };
+  if (cargos.includes('do')) return { sigla: 'DO', color: '#D90429', texto: '#FFFFFF' };
+  if (cargos.includes('dos')) return { sigla: 'DOs', color: '#EA580C', texto: '#FFFFFF' };
+  if (cargos.includes('jc')) return { sigla: 'JC', color: '#1D4ED8', texto: '#FFFFFF' };
+  if (cargos.includes('lem')) return { sigla: 'LEM', color: '#047857', texto: '#FFFFFF' };
+  if (cargos.includes('prehospitalario'))
+    return { sigla: 'PREH', color: '#059669', texto: '#FFFFFF' };
+  if (cargos.includes('instructor'))
+    return { sigla: 'INST', color: '#6D28D9', texto: '#FFFFFF' };
+
+  const partes = (efectivo?.nombre_completo || 'VB').trim().split(/\s+/);
+  const iniciales =
+    partes.length >= 2
+      ? `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase()
+      : (partes[0] || 'VB').slice(0, 2).toUpperCase();
+
+  return { sigla: iniciales, color: '#1F2937', texto: '#FFFFFF' };
+}
+
 export default function CentralMando() {
   const { user, profile } = useAuth();
   const [operativos, setOperativos] = useState([]);
   const [efectivos, setEfectivos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Mapa Leaflet
+  // Mapa Leaflet y capas
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
+  const drawLayerRef = useRef(null);
   const watchIdRef = useRef(null);
+  const lastSentTimestampRef = useRef(0);
 
-  // Trakeo GPS Offline del usuario actual
+  // Buscador de direcciones
+  const [busquedaMapa, setBusquedaMapa] = useState('');
+  const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
+  const [buscandoDir, setBuscandoDir] = useState(false);
+
+  // Herramienta interactiva sobre el mapa ('navegar' | 'pinchar_wp' | 'dibujar_linea' | 'dibujar_poligono')
+  const [modoMapa, setModoMapa] = useState('navegar');
+  const [puntosDibujo, setPuntosDibujo] = useState([]);
+  const [coordenadasPinchadas, setCoordenadasPinchadas] = useState(null);
+  const [geometrias, setGeometrias] = useState([]);
+  const [formGeometria, setFormGeometria] = useState({
+    titulo: '',
+    equipo_especialidad: 'drone',
+    altura_o_profundidad: '',
+    observaciones: '',
+  });
+  const [importandoKml, setImportandoKml] = useState(false);
+
+  // Trakeo GPS Offline del usuario actual (6s online / 20s offline)
   const [online, setOnline] = useState(navigator.onLine);
   const [trackingActivo, setTrackingActivo] = useState(false);
   const [colaOffline, setColaOffline] = useState([]);
@@ -94,9 +153,10 @@ export default function CentralMando() {
   });
   const [pmInicialIds, setPmInicialIds] = useState([]);
 
-  // Sala Táctica del Operativo Seleccionado
+  // Sala Táctica (Panel Lateral Izquierdo en PC / Desplegable en Móvil)
   const [selectedOp, setSelectedOp] = useState(null);
   const [tabTactico, setTabTactico] = useState('despliegue');
+  const [chatAbiertoMovil, setChatAbiertoMovil] = useState(false);
   const [puestoMando, setPuestoMando] = useState([]);
   const [participantes, setParticipantes] = useState([]);
   const [invitadosExt, setInvitadosExt] = useState([]);
@@ -176,6 +236,98 @@ export default function CentralMando() {
   const puedeCrearCuadrilla = esPmDeEsteCaso || esJC;
   const puedeRegistrarTriage = esSA || esDG || esDO || esLEM || esPrehosp;
 
+  // Ordenamiento inteligente de casos:
+  // 1. Activos (< 4 días) más recientes arriba
+  // 2. Activos antiguos (> 4 días) después
+  // 3. Finalizados al final (siempre reabribles)
+  const operativosOrdenados = useMemo(() => {
+    const cuatroDiasMs = 4 * 24 * 60 * 60 * 1000;
+    const ahora = Date.now();
+
+    return [...operativos].sort((a, b) => {
+      const aFin = a.estado === 'finalizado';
+      const bFin = b.estado === 'finalizado';
+      if (aFin !== bFin) return aFin ? 1 : -1;
+
+      const tA = new Date(a.creado_en || 0).getTime();
+      const tB = new Date(b.creado_en || 0).getTime();
+      const aAntiguo = ahora - tA > cuatroDiasMs;
+      const bAntiguo = ahora - tB > cuatroDiasMs;
+
+      if (aAntiguo !== bAntiguo) return aAntiguo ? 1 : -1;
+      return tB - tA;
+    });
+  }, [operativos]);
+
+  // Submenús adaptativos según el perfil
+  const tabsDisponibles = useMemo(() => {
+    const todos = [
+      {
+        key: 'despliegue',
+        label: `Personal (${participantes.length + invitadosExt.length})`,
+        icon: Users,
+        visible: true,
+      },
+      {
+        key: 'waypoints',
+        label: `Puntos (${waypoints.length})`,
+        icon: MapPin,
+        visible: true,
+      },
+      {
+        key: 'geometrias',
+        label: `Polígonos/KML (${geometrias.length})`,
+        icon: Layers,
+        visible: true,
+      },
+      {
+        key: 'triage',
+        label: `Triage (${triages.length})`,
+        icon: HeartPulse,
+        visible: esPmDeEsteCaso || esLEM || esPrehosp,
+      },
+      {
+        key: 'cuadrillas',
+        label: `Cuadrillas (${cuadrillas.length})`,
+        icon: Eye,
+        visible: esPmDeEsteCaso || esJC || !esPrehosp,
+      },
+      {
+        key: 'bitacora',
+        label: `Bitácora (${bitacora.length})`,
+        icon: BookOpen,
+        visible: esPmDeEsteCaso || !esPrehosp,
+      },
+      {
+        key: 'puesto_mando',
+        label: `PM (${puestoMando.length}/5)`,
+        icon: Shield,
+        visible: esPmDeEsteCaso,
+      },
+      {
+        key: 'chat',
+        label: `Chat (${chatMensajes.length})`,
+        icon: MessageSquare,
+        visible: true,
+      },
+    ];
+    return todos.filter((t) => t.visible);
+  }, [
+    participantes.length,
+    invitadosExt.length,
+    waypoints.length,
+    geometrias.length,
+    triages.length,
+    cuadrillas.length,
+    bitacora.length,
+    puestoMando.length,
+    chatMensajes.length,
+    esPmDeEsteCaso,
+    esLEM,
+    esPrehosp,
+    esJC,
+  ]);
+
   // Conexión online / offline
   useEffect(() => {
     const goOnline = () => setOnline(true);
@@ -199,7 +351,6 @@ export default function CentralMando() {
     }
   }, []);
 
-  // Sincronización automática al recuperar conexión
   useEffect(() => {
     if (online && colaOffline.length > 0) {
       sincronizarColaOffline();
@@ -240,18 +391,39 @@ export default function CentralMando() {
     }
   };
 
-  // Inicializar Mapa Leaflet
+  // Inicializar Mapa Leaflet con curvas de nivel topográficas (OpenTopoMap + OSM)
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current).setView([-36.8201, -73.0498], 9);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap · O.N.G. BRE Bío-Bío',
-      maxZoom: 19,
-    }).addTo(map);
+    const capaTopografica = L.tileLayer(
+      'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      {
+        attribution: '&copy; OpenTopoMap (Curvas de Nivel) · O.N.G. BRE Bío-Bío',
+        maxZoom: 17,
+      }
+    );
+
+    const capaCalles = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        attribution: '&copy; OpenStreetMap · O.N.G. BRE Bío-Bío',
+        maxZoom: 19,
+      }
+    );
+
+    capaTopografica.addTo(map);
+    L.control
+      .layers(
+        { 'Topográfico (Curvas de Nivel)': capaTopografica, 'Mapa Calles': capaCalles },
+        null,
+        { position: 'bottomright' }
+      )
+      .addTo(map);
 
     markersLayerRef.current = L.layerGroup().addTo(map);
+    drawLayerRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
 
     setTimeout(() => map.invalidateSize(), 250);
@@ -262,17 +434,39 @@ export default function CentralMando() {
     };
   }, []);
 
+  // Reajustar tamaño de mapa al abrir o cerrar el panel lateral
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      setTimeout(() => mapInstanceRef.current.invalidateSize(), 260);
+    }
+  }, [selectedOp]);
+
+  // Interacción directa con el mapa (Pinchar punto / Dibujar línea o polígono / Crear caso)
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
     const handleMapClick = (e) => {
+      const lat = Number(e.latlng.lat.toFixed(6));
+      const lng = Number(e.latlng.lng.toFixed(6));
+
       if (showModalCrear) {
         setNuevoOp((prev) => ({
           ...prev,
-          latitud: e.latlng.lat.toFixed(5),
-          longitud: e.latlng.lng.toFixed(5),
+          latitud: lat.toFixed(5),
+          longitud: lng.toFixed(5),
         }));
+        return;
+      }
+
+      if (!selectedOp) return;
+
+      if (modoMapa === 'pinchar_wp') {
+        setCoordenadasPinchadas({ lat, lng });
+        setTabTactico('waypoints');
+      } else if (modoMapa === 'dibujar_linea' || modoMapa === 'dibujar_poligono') {
+        setPuntosDibujo((prev) => [...prev, [lat, lng]]);
+        setTabTactico('geometrias');
       }
     };
 
@@ -280,22 +474,69 @@ export default function CentralMando() {
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [showModalCrear]);
+  }, [showModalCrear, selectedOp, modoMapa]);
 
-  // Dibujar marcadores de operativos, waypoints y trazas GPS en el mapa
+  // Dibujar previsualización de trazos en curso sobre drawLayerRef
+  useEffect(() => {
+    const layer = drawLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    if (coordenadasPinchadas) {
+      L.circleMarker([coordenadasPinchadas.lat, coordenadasPinchadas.lng], {
+        radius: 10,
+        color: '#D90429',
+        fillColor: '#F2B632',
+        fillOpacity: 0.95,
+        weight: 3,
+      })
+        .bindTooltip('Punto seleccionado en mapa', { permanent: true })
+        .addTo(layer);
+    }
+
+    if (puntosDibujo.length > 0) {
+      puntosDibujo.forEach((pt, i) => {
+        L.circleMarker(pt, {
+          radius: 5,
+          color: '#0A0A0A',
+          fillColor: '#F2B632',
+          fillOpacity: 1,
+        })
+          .bindTooltip(`Vértice ${i + 1}`)
+          .addTo(layer);
+      });
+
+      if (modoMapa === 'dibujar_poligono' && puntosDibujo.length >= 3) {
+        L.polygon(puntosDibujo, {
+          color: '#2563EB',
+          fillColor: '#2563EB',
+          fillOpacity: 0.25,
+          dashArray: '6, 6',
+        }).addTo(layer);
+      } else if (puntosDibujo.length >= 2) {
+        L.polyline(puntosDibujo, {
+          color: '#2563EB',
+          weight: 4,
+          dashArray: '6, 6',
+        }).addTo(layer);
+      }
+    }
+  }, [coordenadasPinchadas, puntosDibujo, modoMapa]);
+
+  // Dibujar en el mapa: Salas abiertas + Waypoints + Polígonos/Líneas + Voluntarios en tiempo real
   useEffect(() => {
     const layer = markersLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
-    // 1. Marcadores de Operativos Activos
+    // 1. Todas las salas tácticas que NO se han cerrado
     const iconoEmergencia = L.divIcon({
-      className: 'bre-marker',
-      html: `<div style="width:26px;height:26px;border-radius:9999px;background:#D90429;border:3px solid #FFFFFF;box-shadow:0 4px 12px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;">
-        <div style="width:8px;height:8px;border-radius:9999px;background:#F2B632;"></div>
+      className: 'bre-marker-caso',
+      html: `<div style="width:28px;height:28px;border-radius:9999px;background:#D90429;border:3px solid #FFFFFF;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;">
+        <div style="width:9px;height:9px;border-radius:9999px;background:#F2B632;"></div>
       </div>`,
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
     });
 
     operativos
@@ -312,8 +553,8 @@ export default function CentralMando() {
         marker.addTo(layer);
       });
 
-    // 2. Waypoints y Trazas GPS del operativo seleccionado
     if (selectedOp) {
+      // 2. Waypoints del caso
       waypoints.forEach((wp) => {
         const info =
           TIPOS_WAYPOINT.find((t) => t.key === wp.tipo) || TIPOS_WAYPOINT[0];
@@ -325,48 +566,175 @@ export default function CentralMando() {
           fillOpacity: 0.95,
         });
         m.bindPopup(
-          `<strong>${wp.titulo}</strong><br/><small>${info.label} · ${wp.validado ? 'Validado PM' : 'Pendiente validación'
-          }</small>`
+          `<div style="font-family:sans-serif;font-size:12px;">
+            <strong>${wp.titulo}</strong><br/>
+            <span style="color:#555;">${info.label}</span><br/>
+            <small>${wp.descripcion || ''}</small>
+          </div>`
         );
         m.addTo(layer);
       });
 
-      // Agrupar trazas por efectivo o invitado
-      const rutas = {};
-      trackingPuntos.forEach((pt) => {
-        const key = pt.perfil_id || `ext_${pt.invitado_id}`;
-        if (!rutas[key]) rutas[key] = [];
-        rutas[key].push([pt.latitud, pt.longitud]);
+      // 3. Polígonos y Líneas (Drone, Acuático, K9, KML/GPX importados)
+      geometrias.forEach((geo) => {
+        const coords = Array.isArray(geo.coordenadas) ? geo.coordenadas : [];
+        if (coords.length === 0) return;
+
+        const meta = geo.metadatos || {};
+        const popupHtml = `<div style="font-family:sans-serif;font-size:12px;max-width:220px;">
+          <strong style="color:${geo.color || '#D90429'}">${geo.titulo}</strong><br/>
+          <span style="text-transform:uppercase;font-size:10px;font-weight:bold;">Equipo: ${geo.equipo_especialidad}</span>
+          ${meta.altura_o_profundidad ? `<br/><span>Dato técnico: ${meta.altura_o_profundidad}</span>` : ''}
+          ${meta.observaciones ? `<br/><small>${meta.observaciones}</small>` : ''}
+        </div>`;
+
+        if (geo.tipo_geometria === 'poligono' && coords.length >= 3) {
+          L.polygon(coords, {
+            color: geo.color || '#2563EB',
+            fillColor: geo.color || '#2563EB',
+            fillOpacity: 0.25,
+            weight: 3,
+          })
+            .bindPopup(popupHtml)
+            .addTo(layer);
+        } else if (coords.length >= 2) {
+          L.polyline(coords, {
+            color: geo.color || '#059669',
+            weight: 4,
+            opacity: 0.9,
+          })
+            .bindPopup(popupHtml)
+            .addTo(layer);
+        }
       });
 
-      Object.values(rutas).forEach((coords) => {
+      // 4. Trazas GPS + Marcadores en tiempo real de Voluntarios y Externos
+      const rutasPorUsuario = {};
+      trackingPuntos.forEach((pt) => {
+        const key = pt.perfil_id ? `int_${pt.perfil_id}` : `ext_${pt.invitado_id}`;
+        if (!rutasPorUsuario[key]) {
+          rutasPorUsuario[key] = {
+            esExterno: !pt.perfil_id,
+            perfilId: pt.perfil_id,
+            invitadoId: pt.invitado_id,
+            puntos: [],
+          };
+        }
+        rutasPorUsuario[key].puntos.push(pt);
+      });
+
+      Object.values(rutasPorUsuario).forEach((grupo) => {
+        const coords = grupo.puntos.map((p) => [p.latitud, p.longitud]);
+        const ultimo = grupo.puntos[grupo.puntos.length - 1];
+
         if (coords.length > 1) {
           L.polyline(coords, {
-            color: '#059669',
-            weight: 4,
+            color: grupo.esExterno ? '#EAB308' : '#059669',
+            weight: 3.5,
             opacity: 0.85,
           }).addTo(layer);
         }
+
+        if (ultimo) {
+          if (grupo.esExterno) {
+            const inv = invitadosExt.find((i) => i.id === grupo.invitadoId);
+            const iconoExt = L.divIcon({
+              className: 'bre-user-ext',
+              html: `<div style="padding:3px 7px;border-radius:9999px;background:#FACC15;color:#0A0A0A;border:2px solid #0A0A0A;font-weight:900;font-size:10px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+                EXT · ${(inv?.organizacion || 'APOYO').slice(0, 8).toUpperCase()}
+              </div>`,
+              iconSize: [64, 24],
+              iconAnchor: [32, 12],
+            });
+            L.marker([ultimo.latitud, ultimo.longitud], { icon: iconoExt })
+              .bindPopup(
+                `<strong>${inv?.nombre_completo || 'Unidad Externa'}</strong><br/>Organización: ${inv?.organizacion || 'Externa'}`
+              )
+              .addTo(layer);
+          } else {
+            const ef = efectivos.find((e) => e.id === grupo.perfilId);
+            const badge = obtenerBadgeOperativo(ef);
+            const iconoVol = L.divIcon({
+              className: 'bre-user-int',
+              html: `<div style="min-width:30px;height:30px;padding:0 6px;border-radius:9999px;background:${badge.color};color:${badge.texto};border:2.5px solid #FFFFFF;font-weight:900;font-size:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.45);">
+                ${badge.sigla}
+              </div>`,
+              iconSize: [34, 34],
+              iconAnchor: [17, 17],
+            });
+
+            const fotoHtml = ef?.foto_url
+              ? `<img src="${ef.foto_url}" style="width:54px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #ccc;" />`
+              : '';
+
+            const popupVol = `<div style="display:flex;gap:10px;align-items:center;font-family:sans-serif;min-width:190px;">
+              ${fotoHtml}
+              <div style="font-size:11px;line-height:1.35;">
+                <strong style="font-size:12px;color:#0A0A0A;">${ef?.nombre_completo || 'Voluntario BRE'}</strong><br/>
+                <span style="color:#D90429;font-weight:800;">${ef?.codigo_credencial || ''}</span><br/>
+                <span>Sangre: <strong>${ef?.tipo_sangre || 'N/R'}</strong></span><br/>
+                <span>Tel: ${ef?.telefono || 'N/R'}</span>
+              </div>
+            </div>`;
+
+            L.marker([ultimo.latitud, ultimo.longitud], { icon: iconoVol })
+              .bindPopup(popupVol)
+              .addTo(layer);
+          }
+        }
       });
     }
-  }, [operativos, selectedOp, waypoints, trackingPuntos]);
+  }, [operativos, selectedOp, waypoints, geometrias, trackingPuntos, efectivos, invitadosExt]);
 
+  // Suscripción Realtime a ubicaciones GPS, waypoints, geometrías y chat del caso abierto
   useEffect(() => {
     fetchDatosBase();
 
     const channel = supabase
-      .channel('operativos_cambios')
+      .channel('central_mando_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'operativos' },
         () => fetchDatosBase()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'operativo_tracking' },
+        (payload) => {
+          if (selectedOp && payload.new.operativo_id === selectedOp.id) {
+            setTrackingPuntos((prev) => [...prev, payload.new]);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'operativo_waypoints' },
+        () => {
+          if (selectedOp) cargarDetalleOperativo(selectedOp);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'operativo_geometrias' },
+        () => {
+          if (selectedOp) cargarDetalleOperativo(selectedOp);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'operativo_chat' },
+        (payload) => {
+          if (selectedOp && payload.new.operativo_id === selectedOp.id) {
+            setChatMensajes((prev) => [...prev, payload.new]);
+          }
+        }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedOp?.id]);
 
   const fetchDatosBase = async () => {
     setLoading(true);
@@ -378,7 +746,7 @@ export default function CentralMando() {
       supabase
         .from('perfiles')
         .select(
-          'id, nombre_completo, rut, rol, cargos_operativos, telefono, tipo_sangre, alergias, contacto_emergencia_nombre, contacto_emergencia_telefono, comuna, codigo_credencial, estado_validacion'
+          'id, nombre_completo, rut, rol, cargos_operativos, telefono, tipo_sangre, alergias, contacto_emergencia_nombre, contacto_emergencia_telefono, comuna, codigo_credencial, foto_url, estado_validacion'
         )
         .eq('estado_validacion', 'aprobado')
         .order('nombre_completo', { ascending: true }),
@@ -397,6 +765,7 @@ export default function CentralMando() {
       partRes,
       invRes,
       wpRes,
+      geoRes,
       trkRes,
       chatRes,
       bitRes,
@@ -425,6 +794,11 @@ export default function CentralMando() {
       supabase
         .from('operativo_waypoints')
         .select('*, perfiles:creado_por(nombre_completo)')
+        .eq('operativo_id', op.id)
+        .order('creado_en', { ascending: false }),
+      supabase
+        .from('operativo_geometrias')
+        .select('*')
         .eq('operativo_id', op.id)
         .order('creado_en', { ascending: false }),
       supabase
@@ -459,6 +833,7 @@ export default function CentralMando() {
     if (!partRes.error) setParticipantes(partRes.data || []);
     if (!invRes.error) setInvitadosExt(invRes.data || []);
     if (!wpRes.error) setWaypoints(wpRes.data || []);
+    if (!geoRes.error) setGeometrias(geoRes.data || []);
     if (!trkRes.error) setTrackingPuntos(trkRes.data || []);
     if (!chatRes.error) setChatMensajes(chatRes.data || []);
     if (!bitRes.error) setBitacora(bitRes.data || []);
@@ -470,17 +845,21 @@ export default function CentralMando() {
   const enfocarOperativo = async (op) => {
     setSelectedOp(op);
     setTabTactico('despliegue');
+    setModoMapa('navegar');
+    setPuntosDibujo([]);
+    setCoordenadasPinchadas(null);
+
     if (op.latitud && op.longitud && mapInstanceRef.current) {
       mapInstanceRef.current.setView(
         [Number(op.latitud), Number(op.longitud)],
-        13
+        14
       );
     }
 
     if (op.codigo_invitacion) {
       const urlInv = `${window.location.origin}/operativo-invitado/${op.codigo_invitacion}`;
       try {
-        const dataUrl = await QRCode.toDataURL(urlInv, { width: 220, margin: 1 });
+        const dataUrl = await QRCode.toDataURL(urlInv, { width: 200, margin: 1 });
         setQrDataUrl(dataUrl);
       } catch {
         setQrDataUrl('');
@@ -490,12 +869,330 @@ export default function CentralMando() {
     cargarDetalleOperativo(op);
   };
 
-  // Trakeo GPS continuo en terreno (Voluntario / Postulante / Mando)
-  const toggleTracking = () => {
-    if (!selectedOp) {
-      alert('Abre primero la Sala Táctica del operativo donde estás desplegado.');
+  // ============================================================================
+  // BUSCADOR DE DIRECCIONES Y COORDENADAS (OPENSTREETMAP NOMINATIM)
+  // ============================================================================
+  const handleBuscarDireccion = async (e) => {
+    e.preventDefault();
+    const q = busquedaMapa.trim();
+    if (!q) return;
+
+    // Detectar si pegaron coordenadas directas "-36.82, -73.04"
+    const matchCoords = q.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+    if (matchCoords && mapInstanceRef.current) {
+      const lat = parseFloat(matchCoords[1]);
+      const lng = parseFloat(matchCoords[2]);
+      mapInstanceRef.current.setView([lat, lng], 15);
+      setCoordenadasPinchadas({ lat, lng });
+      setResultadosBusqueda([]);
       return;
     }
+
+    setBuscandoDir(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&countrycodes=cl&limit=5&q=${encodeURIComponent(
+          q
+        )}`
+      );
+      const data = await res.json();
+      setResultadosBusqueda(Array.isArray(data) ? data : []);
+    } catch {
+      setResultadosBusqueda([]);
+    } finally {
+      setBuscandoDir(false);
+    }
+  };
+
+  // ============================================================================
+  // GUARDAR POLÍGONOS / LÍNEAS / METADATOS DRONE Y ACUÁTICO
+  // ============================================================================
+  const handleGuardarGeometria = async (e) => {
+    e.preventDefault();
+    if (!selectedOp || puntosDibujo.length < 2) return;
+
+    const eqInfo =
+      EQUIPOS_GEOMETRIA.find((eq) => eq.key === formGeometria.equipo_especialidad) ||
+      EQUIPOS_GEOMETRIA[0];
+
+    const tipoGeo =
+      modoMapa === 'dibujar_poligono' && puntosDibujo.length >= 3
+        ? 'poligono'
+        : 'linea';
+
+    const { error } = await supabase.from('operativo_geometrias').insert([
+      {
+        operativo_id: selectedOp.id,
+        creado_por: profile.id,
+        creado_por_nombre: profile.nombre_completo,
+        tipo_geometria: tipoGeo,
+        equipo_especialidad: formGeometria.equipo_especialidad,
+        titulo: formGeometria.titulo.trim(),
+        color: eqInfo.color,
+        coordenadas: puntosDibujo,
+        metadatos: {
+          altura_o_profundidad: formGeometria.altura_o_profundidad.trim(),
+          observaciones: formGeometria.observaciones.trim(),
+        },
+        validado_pm: esPmDeEsteCaso,
+      },
+    ]);
+
+    if (!error) {
+      setPuntosDibujo([]);
+      setModoMapa('navegar');
+      setFormGeometria({
+        titulo: '',
+        equipo_especialidad: 'drone',
+        altura_o_profundidad: '',
+        observaciones: '',
+      });
+      cargarDetalleOperativo(selectedOp);
+    }
+  };
+
+  // ============================================================================
+  // IMPORTAR KML / KMZ / GPX (GEO TRACKER / GOOGLE EARTH)
+  // ============================================================================
+  const handleImportarArchivoGeo = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedOp) return;
+
+    setImportandoKml(true);
+    setAlertaTactica('');
+
+    try {
+      let xmlTexto = '';
+      const nombreLower = file.name.toLowerCase();
+
+      if (nombreLower.endsWith('.kmz')) {
+        const zip = await JSZip.loadAsync(file);
+        const kmlEntry = Object.values(zip.files).find((f) =>
+          f.name.toLowerCase().endsWith('.kml')
+        );
+        if (!kmlEntry) throw new Error('El archivo KMZ no contiene un KML válido.');
+        xmlTexto = await kmlEntry.async('text');
+      } else {
+        xmlTexto = await file.text();
+      }
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlTexto, 'text/xml');
+
+      const nuevasGeos = [];
+      const nuevosWps = [];
+
+      // 1. Parsear GPX (Geo Tracker)
+      if (nombreLower.endsWith('.gpx')) {
+        const wpts = Array.from(xmlDoc.getElementsByTagName('wpt'));
+        wpts.forEach((w) => {
+          const lat = parseFloat(w.getAttribute('lat'));
+          const lon = parseFloat(w.getAttribute('lon'));
+          const name =
+            w.getElementsByTagName('name')[0]?.textContent || 'Waypoint GPX';
+          if (!isNaN(lat) && !isNaN(lon)) {
+            nuevosWps.push({
+              operativo_id: selectedOp.id,
+              creado_por: profile.id,
+              autor_etiqueta: `${profile.nombre_completo} (GPX)`,
+              tipo: 'observacion',
+              titulo: name,
+              latitud: lat,
+              longitud: lon,
+              validado: esPmDeEsteCaso,
+            });
+          }
+        });
+
+        const trksegs = Array.from(xmlDoc.getElementsByTagName('trkseg'));
+        trksegs.forEach((seg, idx) => {
+          const pts = Array.from(seg.getElementsByTagName('trkpt'))
+            .map((pt) => [
+              parseFloat(pt.getAttribute('lat')),
+              parseFloat(pt.getAttribute('lon')),
+            ])
+            .filter(([la, lo]) => !isNaN(la) && !isNaN(lo));
+
+          if (pts.length >= 2) {
+            nuevasGeos.push({
+              operativo_id: selectedOp.id,
+              creado_por: profile.id,
+              creado_por_nombre: profile.nombre_completo,
+              tipo_geometria: 'linea',
+              equipo_especialidad: 'terrestre',
+              titulo: `${file.name} · Track #${idx + 1}`,
+              color: '#059669',
+              coordenadas: pts,
+              metadatos: { observaciones: 'Importado desde GPX / Geo Tracker' },
+              validado_pm: esPmDeEsteCaso,
+            });
+          }
+        });
+      } else {
+        // 2. Parsear KML / KMZ (Google Earth / Geo Tracker)
+        const placemarks = Array.from(xmlDoc.getElementsByTagName('Placemark'));
+        placemarks.forEach((pm, idx) => {
+          const nombre =
+            pm.getElementsByTagName('name')[0]?.textContent?.trim() ||
+            `Elemento KML #${idx + 1}`;
+          const desc =
+            pm.getElementsByTagName('description')[0]?.textContent?.trim() || '';
+
+          const parseCoordsKml = (str) =>
+            str
+              .trim()
+              .split(/\s+/)
+              .map((par) => {
+                const [lon, lat] = par.split(',').map(Number);
+                return [lat, lon];
+              })
+              .filter(([la, lo]) => !isNaN(la) && !isNaN(lo));
+
+          const polyNode = pm.getElementsByTagName('Polygon')[0];
+          const lineNode = pm.getElementsByTagName('LineString')[0];
+          const pointNode = pm.getElementsByTagName('Point')[0];
+
+          if (polyNode) {
+            const coordStr =
+              polyNode.getElementsByTagName('coordinates')[0]?.textContent || '';
+            const pts = parseCoordsKml(coordStr);
+            if (pts.length >= 3) {
+              nuevasGeos.push({
+                operativo_id: selectedOp.id,
+                creado_por: profile.id,
+                creado_por_nombre: profile.nombre_completo,
+                tipo_geometria: 'poligono',
+                equipo_especialidad: 'drone',
+                titulo: nombre,
+                color: '#2563EB',
+                coordenadas: pts,
+                metadatos: { observaciones: desc || 'Polígono KML/KMZ' },
+                validado_pm: esPmDeEsteCaso,
+              });
+            }
+          } else if (lineNode) {
+            const coordStr =
+              lineNode.getElementsByTagName('coordinates')[0]?.textContent || '';
+            const pts = parseCoordsKml(coordStr);
+            if (pts.length >= 2) {
+              nuevasGeos.push({
+                operativo_id: selectedOp.id,
+                creado_por: profile.id,
+                creado_por_nombre: profile.nombre_completo,
+                tipo_geometria: 'linea',
+                equipo_especialidad: 'terrestre',
+                titulo: nombre,
+                color: '#059669',
+                coordenadas: pts,
+                metadatos: { observaciones: desc || 'Ruta KML/KMZ' },
+                validado_pm: esPmDeEsteCaso,
+              });
+            }
+          } else if (pointNode) {
+            const coordStr =
+              pointNode.getElementsByTagName('coordinates')[0]?.textContent || '';
+            const pts = parseCoordsKml(coordStr);
+            if (pts.length === 1) {
+              nuevosWps.push({
+                operativo_id: selectedOp.id,
+                creado_por: profile.id,
+                autor_etiqueta: `${profile.nombre_completo} (KML)`,
+                tipo: 'observacion',
+                titulo: nombre,
+                descripcion: desc || null,
+                latitud: pts[0][0],
+                longitud: pts[0][1],
+                validado: esPmDeEsteCaso,
+              });
+            }
+          }
+        });
+      }
+
+      if (nuevasGeos.length > 0) {
+        await supabase.from('operativo_geometrias').insert(nuevasGeos);
+      }
+      if (nuevosWps.length > 0) {
+        await supabase.from('operativo_waypoints').insert(nuevosWps);
+      }
+
+      if (nuevasGeos.length === 0 && nuevosWps.length === 0) {
+        setAlertaTactica(
+          'No se encontraron coordenadas válidas dentro del archivo KML/KMZ/GPX.'
+        );
+      } else {
+        cargarDetalleOperativo(selectedOp);
+      }
+    } catch (err) {
+      setAlertaTactica(err.message || 'Error al procesar archivo KML/KMZ/GPX.');
+    } finally {
+      setImportandoKml(false);
+      e.target.value = '';
+    }
+  };
+
+  // ============================================================================
+  // EXPORTAR TODO EL OPERATIVO A .KML (LISTO PARA GOOGLE EARTH)
+  // ============================================================================
+  const exportarOperativoKML = () => {
+    if (!selectedOp) return;
+
+    const placemarksWps = waypoints
+      .map(
+        (wp) => `
+      <Placemark>
+        <name><![CDATA[${wp.titulo} (${wp.tipo})]]></name>
+        <description><![CDATA[${wp.descripcion || ''}]]></description>
+        <Point><coordinates>${wp.longitud},${wp.latitud},0</coordinates></Point>
+      </Placemark>`
+      )
+      .join('');
+
+    const placemarksGeos = geometrias
+      .map((geo) => {
+        const coordsStr = (geo.coordenadas || [])
+          .map(([lat, lng]) => `${lng},${lat},0`)
+          .join(' ');
+        if (geo.tipo_geometria === 'poligono') {
+          return `
+          <Placemark>
+            <name><![CDATA[${geo.titulo} [${geo.equipo_especialidad.toUpperCase()}]]]></name>
+            <Polygon><outerBoundaryIs><LinearRing><coordinates>${coordsStr}</coordinates></LinearRing></outerBoundaryIs></Polygon>
+          </Placemark>`;
+        }
+        return `
+        <Placemark>
+          <name><![CDATA[${geo.titulo}]]></name>
+          <LineString><coordinates>${coordsStr}</coordinates></LineString>
+        </Placemark>`;
+      })
+      .join('');
+
+    const kmlCompleto = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name><![CDATA[BRE Bio-Bio - ${selectedOp.titulo}]]></name>
+    ${placemarksWps}
+    ${placemarksGeos}
+  </Document>
+</kml>`;
+
+    const blob = new Blob([kmlCompleto], {
+      type: 'application/vnd.google-earth.kml+xml',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BRE_${selectedOp.titulo.replace(/\s+/g, '_')}.kml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ============================================================================
+  // TRAKEO GPS EN TIEMPO REAL (6s ONLINE / MÁX. 20s OFFLINE)
+  // ============================================================================
+  const toggleTracking = () => {
+    if (!selectedOp) return;
 
     if (trackingActivo) {
       if (watchIdRef.current !== null) {
@@ -507,13 +1204,20 @@ export default function CentralMando() {
     }
 
     if (!navigator.geolocation) {
-      alert('Tu navegador o dispositivo no soporta geolocalización GPS.');
+      alert('Tu dispositivo no soporta geolocalización GPS.');
       return;
     }
 
     setTrackingActivo(true);
+    lastSentTimestampRef.current = 0;
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
+        const ahora = Date.now();
+        const intervaloMinimoMs = navigator.onLine ? 6000 : 20000;
+        if (ahora - lastSentTimestampRef.current < intervaloMinimoMs) return;
+        lastSentTimestampRef.current = ahora;
+
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setUltimaPos({ lat, lng });
@@ -541,7 +1245,7 @@ export default function CentralMando() {
         }
       },
       (err) => console.error('GPS Error:', err),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
   };
 
@@ -614,7 +1318,6 @@ export default function CentralMando() {
     }
   };
 
-  // Solicitud de unión (Voluntarios y Postulantes)
   const handleSolicitarUnirme = async () => {
     if (!selectedOp || !profile?.id) return;
     const funcionDefault =
@@ -636,7 +1339,6 @@ export default function CentralMando() {
     }
   };
 
-  // PM invita o asigna directamente a un Voluntario o Postulante
   const handleAsignarParticipanteDirecto = async (e) => {
     e.preventDefault();
     if (!invitarInternoId || !selectedOp) return;
@@ -684,7 +1386,6 @@ export default function CentralMando() {
     if (!error && selectedOp) cargarDetalleOperativo(selectedOp);
   };
 
-  // Puesto de Mando (máx 5)
   const handleAgregarPuestoMando = async (e) => {
     e.preventDefault();
     setAlertaTactica('');
@@ -722,12 +1423,12 @@ export default function CentralMando() {
     if (!error && selectedOp) cargarDetalleOperativo(selectedOp);
   };
 
-  // Puntos Estratégicos (Waypoints)
   const handleCrearWaypoint = async (e) => {
     e.preventDefault();
     if (!nuevoWp.titulo.trim() || !selectedOp) return;
 
-    const coords = ultimaPos || {
+    const coords = coordenadasPinchadas ||
+      ultimaPos || {
       lat: Number(selectedOp.latitud) || -36.8201,
       lng: Number(selectedOp.longitud) || -73.0498,
     };
@@ -741,7 +1442,7 @@ export default function CentralMando() {
       descripcion: nuevoWp.descripcion.trim() || null,
       latitud: coords.lat,
       longitud: coords.lng,
-      validado: esPmDeEsteCaso, // Si lo crea el PM queda validado al instante
+      validado: esPmDeEsteCaso,
     };
 
     if (navigator.onLine) {
@@ -758,6 +1459,8 @@ export default function CentralMando() {
     }
 
     setNuevoWp({ tipo: 'indicio', titulo: '', descripcion: '' });
+    setCoordenadasPinchadas(null);
+    setModoMapa('navegar');
   };
 
   const handleValidarWaypoint = async (wpId, estadoVal) => {
@@ -772,7 +1475,6 @@ export default function CentralMando() {
     if (!error && selectedOp) cargarDetalleOperativo(selectedOp);
   };
 
-  // Chat Táctico + Fotos
   const handleEnviarChat = async (e) => {
     e.preventDefault();
     if (!nuevoMensaje.trim() && !fotoChat) return;
@@ -900,7 +1602,6 @@ export default function CentralMando() {
     ventana.document.close();
   };
 
-  // Cuadrillas y Triage
   const toggleIntegranteCuadrilla = (efectivoId) => {
     setNuevaCuadrilla((prev) => {
       const existe = prev.integrantes_ids.includes(efectivoId);
@@ -989,14 +1690,14 @@ export default function CentralMando() {
   return (
     <DashboardLayout
       title="Central de Mando Táctica"
-      subtitle="Operativos reales y simulacros · Trakeo offline · Interoperabilidad QR · Bitácora"
+      subtitle="Mapa topográfico en tiempo real · Polígonos KML/KMZ/GPX · Interoperabilidad QR"
       fullHeight
       actions={
         <div className="flex items-center gap-2">
           <span
             className={`hidden items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-black uppercase sm:inline-flex ${online
-              ? 'bg-emerald-100 text-emerald-800'
-              : 'bg-amber-100 text-amber-900'
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-900'
               }`}
           >
             {online ? <Wifi size={13} /> : <WifiOff size={13} />}
@@ -1028,82 +1729,1211 @@ export default function CentralMando() {
         </div>
       }
     >
-      <div className="flex h-[calc(100vh-73px)] flex-col lg:flex-row">
-        {/* Mapa Interactivo */}
-        <div className="relative z-10 h-1/2 w-full bg-neutral-200 lg:h-full lg:w-2/3">
-          <div ref={mapContainerRef} className="h-full w-full" />
-        </div>
-
-        {/* Columna Derecha: Lista de Casos Activos y Simulacros */}
-        <div className="h-1/2 w-full overflow-y-auto border-t border-neutral-200 bg-white lg:h-full lg:w-1/3 lg:border-l lg:border-t-0">
-          <div className="sticky top-0 z-10 border-b border-neutral-100 bg-neutral-50 px-5 py-3.5">
-            <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-800">
-              <AlertCircle
-                size={17}
-                strokeWidth={2.5}
-                className="text-[#D90429]"
-              />
-              Operativos y Simulacros ({operativos.length})
-            </h2>
-          </div>
-
-          <div className="space-y-3 p-4">
-            {loading ? (
-              <p className="py-8 text-center text-xs font-bold text-neutral-500">
-                Cargando casos...
-              </p>
-            ) : operativos.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 py-10 text-center text-xs font-bold text-neutral-500">
-                No hay operativos registrados.
+      <div className="relative flex h-[calc(100vh-73px)] flex-col lg:flex-row">
+        {/* ========================================================================
+            PANEL IZQUIERDO: LISTA DE CASOS O SALA TÁCTICA LATERAL (SIN TAPAR MAPA)
+           ======================================================================== */}
+        <div className="z-20 flex h-[48%] w-full flex-col border-b border-neutral-200 bg-white lg:h-full lg:w-[440px] lg:shrink-0 lg:border-b-0 lg:border-r">
+          {!selectedOp ? (
+            /* VISTA A: LISTADO ORDENADO DE OPERATIVOS */
+            <>
+              <div className="border-b border-neutral-100 bg-neutral-50 px-5 py-3.5">
+                <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-800">
+                  <AlertCircle
+                    size={17}
+                    strokeWidth={2.5}
+                    className="text-[#D90429]"
+                  />
+                  Operativos y Simulacros ({operativosOrdenados.length})
+                </h2>
               </div>
-            ) : (
-              operativos.map((op) => (
-                <div
-                  key={op.id}
-                  className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:shadow-md"
-                >
-                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                    <span
-                      className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${op.tipo_operativo === 'simulacro'
-                        ? 'bg-purple-100 text-purple-800'
-                        : 'bg-red-100 text-red-800'
-                        }`}
-                    >
-                      {op.tipo_operativo === 'simulacro'
-                        ? 'Simulacro / Ficticio'
-                        : 'Emergencia Real'}
-                    </span>
-                    <span className="rounded bg-neutral-100 px-2 py-0.5 text-[10px] font-black uppercase text-neutral-700">
-                      {(op.estado || 'pendiente').replace('_', ' ')}
-                    </span>
+
+              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                {loading ? (
+                  <p className="py-8 text-center text-xs font-bold text-neutral-500">
+                    Cargando casos...
+                  </p>
+                ) : operativosOrdenados.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 py-10 text-center text-xs font-bold text-neutral-500">
+                    No hay operativos registrados.
+                  </div>
+                ) : (
+                  operativosOrdenados.map((op) => {
+                    const cerrado = op.estado === 'finalizado';
+                    return (
+                      <div
+                        key={op.id}
+                        className={`rounded-xl border p-4 shadow-sm transition-all ${cerrado
+                            ? 'border-neutral-200 bg-neutral-50 opacity-80'
+                            : 'border-neutral-200 bg-white hover:shadow-md'
+                          }`}
+                      >
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${op.tipo_operativo === 'simulacro'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-red-100 text-red-800'
+                              }`}
+                          >
+                            {op.tipo_operativo === 'simulacro'
+                              ? 'Simulacro'
+                              : 'Emergencia Real'}
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${cerrado
+                                ? 'bg-neutral-200 text-neutral-700'
+                                : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                          >
+                            {(op.estado || 'pendiente').replace('_', ' ')}
+                          </span>
+                        </div>
+
+                        <h3 className="font-black text-neutral-900">
+                          {op.titulo}
+                        </h3>
+                        <p className="mt-1 line-clamp-2 text-xs font-medium text-neutral-600">
+                          {op.descripcion}
+                        </p>
+
+                        <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2.5 text-[11px] font-semibold text-neutral-400">
+                          <span>
+                            {op.creado_en
+                              ? new Date(op.creado_en).toLocaleDateString('es-CL')
+                              : ''}
+                          </span>
+                          <button
+                            onClick={() => enfocarOperativo(op)}
+                            className="rounded-lg bg-[#0A0A0A] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
+                          >
+                            {cerrado ? 'Reabrir / Consultar →' : 'Sala Táctica →'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            /* VISTA B: SALA TÁCTICA DEL CASO SELECCIONADO (PANEL LATERAL EN PC / DESPLEGABLE EN MÓVIL) */
+            <div className="flex h-full flex-col">
+              {/* Header compacto del caso */}
+              <div className="bg-[#0A0A0A] px-4 py-3 text-white">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded bg-[#F2B632] px-1.5 py-0.5 text-[9px] font-black uppercase text-black">
+                        {selectedOp.tipo_operativo === 'simulacro'
+                          ? 'Simulacro'
+                          : 'Real'}
+                      </span>
+                      <span className="truncate font-mono text-[10px] text-neutral-400">
+                        {selectedOp.codigo_invitacion}
+                      </span>
+                    </div>
+                    <h3 className="truncate text-sm font-black">
+                      {selectedOp.titulo}
+                    </h3>
                   </div>
 
-                  <h3 className="font-black text-neutral-900">{op.titulo}</h3>
-                  <p className="mt-1 line-clamp-2 text-xs font-medium text-neutral-600">
-                    {op.descripcion}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    {estoyAutorizadoEnCaso && (
+                      <button
+                        onClick={toggleTracking}
+                        title="Activar/Detener Trakeo GPS en vivo"
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase ${trackingActivo
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-[#D90429] text-white'
+                          }`}
+                      >
+                        <Navigation size={13} />
+                        {trackingActivo ? 'GPS ON' : 'GPS'}
+                      </button>
+                    )}
 
-                  <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2.5 text-[11px] font-semibold text-neutral-400">
-                    <span>
-                      {op.creado_en
-                        ? new Date(op.creado_en).toLocaleDateString('es-CL')
-                        : ''}
-                    </span>
                     <button
-                      onClick={() => enfocarOperativo(op)}
-                      className="rounded-lg bg-[#0A0A0A] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
+                      onClick={() => {
+                        setSelectedOp(null);
+                        setModoMapa('navegar');
+                        setPuntosDibujo([]);
+                      }}
+                      title="Volver a lista de casos"
+                      className="rounded-lg bg-white/10 p-1.5 text-white hover:bg-white/20"
                     >
-                      Entrar a Sala Táctica →
+                      <X size={16} />
                     </button>
                   </div>
                 </div>
-              ))
+
+                {/* Control de estado (Reabrir si estaba finalizado) */}
+                {esPmDeEsteCaso && (
+                  <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="text-[10px] font-bold uppercase text-neutral-400">
+                      Estado del caso:
+                    </span>
+                    <div className="flex gap-1">
+                      {['pendiente', 'en_curso', 'finalizado'].map((st) => (
+                        <button
+                          key={st}
+                          onClick={() =>
+                            handleCambiarEstadoOp(selectedOp.id, st)
+                          }
+                          className={`rounded px-2 py-0.5 text-[9px] font-black uppercase ${selectedOp.estado === st
+                              ? 'bg-[#D90429] text-white'
+                              : 'bg-white/10 text-neutral-300'
+                            }`}
+                        >
+                          {st === 'finalizado' ? 'Cerrar' : st.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Selector Desplegable en Celular + Pestañas Compactas en PC */}
+              <div className="border-b border-neutral-200 bg-neutral-50 px-3 py-2">
+                <select
+                  value={tabTactico}
+                  onChange={(e) => setTabTactico(e.target.value)}
+                  className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase text-neutral-900 lg:hidden"
+                >
+                  {tabsDisponibles.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="hidden flex-wrap gap-1 lg:flex">
+                  {tabsDisponibles.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <button
+                        key={t.key}
+                        onClick={() => setTabTactico(t.key)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase transition-colors ${tabTactico === t.key
+                            ? 'bg-[#0A0A0A] text-[#F2B632]'
+                            : 'border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100'
+                          }`}
+                      >
+                        <Icon size={12} />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {alertaTactica && (
+                <div className="mx-3 mt-2 rounded-lg border-l-4 border-[#D90429] bg-red-50 p-2.5 text-[11px] font-bold text-red-900">
+                  {alertaTactica}
+                </div>
+              )}
+
+              {/* Contenido Scrolleable del Panel Lateral */}
+              <div className="flex-1 overflow-y-auto p-3.5 text-xs">
+                {loadingDetalle ? (
+                  <p className="py-8 text-center font-bold text-neutral-500">
+                    Sincronizando datos tácticos...
+                  </p>
+                ) : tabTactico === 'despliegue' ? (
+                  <div className="space-y-4">
+                    {!esPmDeEsteCaso && (
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                        <p className="font-bold text-neutral-800">
+                          {!miParticipacion
+                            ? 'Solicita autorización al Puesto de Mando para desplegarte.'
+                            : `Estado: ${miParticipacion.estado.toUpperCase()} (${miParticipacion.funcion_terreno})`}
+                        </p>
+                        {!miParticipacion && (
+                          <button
+                            onClick={handleSolicitarUnirme}
+                            className="mt-2 w-full rounded-lg bg-[#D90429] py-2 text-[11px] font-black uppercase text-white"
+                          >
+                            Solicitar Unirme al Caso
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {esPmDeEsteCaso && (
+                      <div className="rounded-xl bg-neutral-950 p-3.5 text-white">
+                        <span className="inline-flex items-center gap-1 rounded bg-[#F2B632] px-2 py-0.5 text-[9px] font-black uppercase text-black">
+                          <QrCode size={11} /> Interoperabilidad QR Externa
+                        </span>
+                        <div className="mt-2 flex items-center gap-3">
+                          {qrDataUrl && (
+                            <img
+                              src={qrDataUrl}
+                              alt="QR"
+                              className="h-20 w-20 shrink-0 rounded-lg bg-white p-1"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <p className="text-[11px] text-neutral-300">
+                              Bomberos, Socorro Andino u otras agencias:
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(urlInvitacionActual);
+                                setCopiadoLink(true);
+                                setTimeout(() => setCopiadoLink(false), 2000);
+                              }}
+                              className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-[#D90429] py-1.5 text-[10px] font-black uppercase text-white"
+                            >
+                              {copiadoLink ? (
+                                <>
+                                  <Check size={12} /> Link Copiado
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} /> Copiar Enlace Invitado
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {esPmDeEsteCaso && (
+                      <form
+                        onSubmit={handleAsignarParticipanteDirecto}
+                        className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      >
+                        <select
+                          required
+                          value={invitarInternoId}
+                          onChange={(e) => setInvitarInternoId(e.target.value)}
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        >
+                          <option value="">Asignar miembro BRE...</option>
+                          {efectivos.map((ef) => (
+                            <option key={ef.id} value={ef.id}>
+                              {ef.nombre_completo} ({ef.rol.toUpperCase()})
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex gap-1.5">
+                          <select
+                            value={invitarFuncion}
+                            onChange={(e) => setInvitarFuncion(e.target.value)}
+                            className="flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-[11px] font-bold"
+                          >
+                            <option value="Búsqueda y Rescate">Búsqueda</option>
+                            <option value="Equipo Drone">Equipo Drone</option>
+                            <option value="Equipo Acuático">Equipo Acuático</option>
+                            <option value="Prehospitalario">Prehospitalario</option>
+                            <option value="Oyente / Observador">Oyente</option>
+                          </select>
+                          <button
+                            type="submit"
+                            className="rounded-lg bg-[#0A0A0A] px-3 py-1.5 text-[10px] font-black uppercase text-[#F2B632]"
+                          >
+                            Asignar
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <h4 className="font-black uppercase text-neutral-500">
+                        Efectivos Internos ({participantes.length})
+                      </h4>
+                      {participantes.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between rounded-lg border border-neutral-200 p-2.5"
+                        >
+                          <div>
+                            <p className="font-black text-neutral-900">
+                              {p.perfiles?.nombre_completo}
+                            </p>
+                            <p className="text-[10px] text-neutral-500">
+                              {p.funcion_terreno} · {p.estado}
+                            </p>
+                          </div>
+                          {esPmDeEsteCaso && p.estado === 'solicitado' && (
+                            <button
+                              onClick={() =>
+                                handleAutorizarParticipante(p.id, 'autorizado')
+                              }
+                              className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-black uppercase text-white"
+                            >
+                              Autorizar
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h4 className="font-black uppercase text-neutral-500">
+                        Externos QR ({invitadosExt.length})
+                      </h4>
+                      {invitadosExt.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 p-2.5"
+                        >
+                          <div>
+                            <p className="font-black text-neutral-900">
+                              {inv.nombre_completo}
+                            </p>
+                            <p className="text-[10px] font-bold text-amber-900">
+                              {inv.organizacion} · {inv.estado}
+                            </p>
+                          </div>
+                          {esPmDeEsteCaso && inv.estado === 'pendiente' && (
+                            <button
+                              onClick={() =>
+                                handleAutorizarInvitadoExterno(
+                                  inv.id,
+                                  'autorizado'
+                                )
+                              }
+                              className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-black uppercase text-white"
+                            >
+                              Autorizar
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : tabTactico === 'waypoints' ? (
+                  <div className="space-y-3">
+                    {estoyAutorizadoEnCaso && (
+                      <form
+                        onSubmit={handleCrearWaypoint}
+                        className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-black uppercase text-neutral-800">
+                            Nuevo Punto Estratégico
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setModoMapa(
+                                modoMapa === 'pinchar_wp'
+                                  ? 'navegar'
+                                  : 'pinchar_wp'
+                              )
+                            }
+                            className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase ${modoMapa === 'pinchar_wp'
+                                ? 'bg-[#F2B632] text-black'
+                                : 'bg-[#0A0A0A] text-white'
+                              }`}
+                          >
+                            {modoMapa === 'pinchar_wp'
+                              ? 'Haz clic en el mapa...'
+                              : 'Pinchar en Mapa'}
+                          </button>
+                        </div>
+
+                        {coordenadasPinchadas && (
+                          <p className="font-mono text-[10px] font-bold text-emerald-700">
+                            Coordenada pinchada: {coordenadasPinchadas.lat},{' '}
+                            {coordenadasPinchadas.lng}
+                          </p>
+                        )}
+
+                        <select
+                          value={nuevoWp.tipo}
+                          onChange={(e) =>
+                            setNuevoWp({ ...nuevoWp, tipo: e.target.value })
+                          }
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        >
+                          {TIPOS_WAYPOINT.map((t) => (
+                            <option key={t.key} value={t.key}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          required
+                          value={nuevoWp.titulo}
+                          onChange={(e) =>
+                            setNuevoWp({ ...nuevoWp, titulo: e.target.value })
+                          }
+                          placeholder="Título del punto..."
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-lg bg-[#D90429] py-2 text-[11px] font-black uppercase text-white"
+                        >
+                          Guardar Punto en Mapa
+                        </button>
+                      </form>
+                    )}
+
+                    <div className="space-y-2">
+                      {waypoints.map((wp) => {
+                        const info =
+                          TIPOS_WAYPOINT.find((t) => t.key === wp.tipo) ||
+                          TIPOS_WAYPOINT[0];
+                        return (
+                          <div
+                            key={wp.id}
+                            className="rounded-lg border border-neutral-200 p-2.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span
+                                className="rounded px-1.5 py-0.5 text-[9px] font-black uppercase text-white"
+                                style={{ backgroundColor: info.color }}
+                              >
+                                {info.label}
+                              </span>
+                              {esPmDeEsteCaso && !wp.validado && (
+                                <button
+                                  onClick={() =>
+                                    handleValidarWaypoint(wp.id, true)
+                                  }
+                                  className="rounded bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase text-white"
+                                >
+                                  Validar
+                                </button>
+                              )}
+                            </div>
+                            <p className="mt-1 font-black text-neutral-900">
+                              {wp.titulo}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : tabTactico === 'geometrias' ? (
+                  /* PESTAÑA POLÍGONOS / DRONE / ACUÁTICO / IMPORTAR Y EXPORTAR KML-KMZ-GPX */
+                  <div className="space-y-4">
+                    {/* Importar KML / KMZ / GPX y Exportar KML Google Earth */}
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+                      <h4 className="font-black uppercase text-neutral-900">
+                        Intercambio GPS (Geo Tracker · Google Earth)
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] px-3 py-2 text-[10px] font-black uppercase text-[#F2B632] hover:bg-neutral-800">
+                          <Upload size={13} />
+                          <span>
+                            {importandoKml
+                              ? 'Leyendo...'
+                              : 'Subir KML/KMZ/GPX'}
+                          </span>
+                          <input
+                            type="file"
+                            accept=".kml,.kmz,.gpx"
+                            onChange={handleImportarArchivoGeo}
+                            className="hidden"
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={exportarOperativoKML}
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-[10px] font-black uppercase text-neutral-900 hover:bg-neutral-100"
+                        >
+                          <Download size={13} />
+                          <span>Bajar KML Earth</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dibujo Manual de Polígonos / Líneas con Metadatos Drone o Acuático */}
+                    {estoyAutorizadoEnCaso && (
+                      <div className="rounded-xl border border-neutral-200 bg-white p-3 space-y-2.5">
+                        <h4 className="font-black uppercase text-neutral-900">
+                          Trazar Sector / Polígono en Mapa
+                        </h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPuntosDibujo([]);
+                              setModoMapa(
+                                modoMapa === 'dibujar_poligono'
+                                  ? 'navegar'
+                                  : 'dibujar_poligono'
+                              );
+                            }}
+                            className={`rounded-lg py-1.5 text-[10px] font-black uppercase ${modoMapa === 'dibujar_poligono'
+                                ? 'bg-[#2563EB] text-white'
+                                : 'border border-neutral-300 text-neutral-700'
+                              }`}
+                          >
+                            {modoMapa === 'dibujar_poligono'
+                              ? 'Pinchando Polígono...'
+                              : '+ Polígono Área'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPuntosDibujo([]);
+                              setModoMapa(
+                                modoMapa === 'dibujar_linea'
+                                  ? 'navegar'
+                                  : 'dibujar_linea'
+                              );
+                            }}
+                            className={`rounded-lg py-1.5 text-[10px] font-black uppercase ${modoMapa === 'dibujar_linea'
+                                ? 'bg-[#059669] text-white'
+                                : 'border border-neutral-300 text-neutral-700'
+                              }`}
+                          >
+                            {modoMapa === 'dibujar_linea'
+                              ? 'Pinchando Línea...'
+                              : '+ Línea Track'}
+                          </button>
+                        </div>
+
+                        {puntosDibujo.length > 0 && (
+                          <form
+                            onSubmit={handleGuardarGeometria}
+                            className="space-y-2 border-t border-neutral-100 pt-2"
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-bold text-blue-700">
+                              <span>{puntosDibujo.length} vértices marcados</span>
+                              <button
+                                type="button"
+                                onClick={() => setPuntosDibujo([])}
+                                className="inline-flex items-center gap-1 text-red-600"
+                              >
+                                <RotateCcw size={11} /> Limpiar
+                              </button>
+                            </div>
+
+                            <select
+                              value={formGeometria.equipo_especialidad}
+                              onChange={(e) =>
+                                setFormGeometria({
+                                  ...formGeometria,
+                                  equipo_especialidad: e.target.value,
+                                })
+                              }
+                              className="w-full rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-bold"
+                            >
+                              {EQUIPOS_GEOMETRIA.map((eq) => (
+                                <option key={eq.key} value={eq.key}>
+                                  {eq.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            <input
+                              type="text"
+                              required
+                              value={formGeometria.titulo}
+                              onChange={(e) =>
+                                setFormGeometria({
+                                  ...formGeometria,
+                                  titulo: e.target.value,
+                                })
+                              }
+                              placeholder="Nombre sector (Ej. Barrido Drone Quebrada Norte)"
+                              className="w-full rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs"
+                            />
+
+                            <input
+                              type="text"
+                              value={formGeometria.altura_o_profundidad}
+                              onChange={(e) =>
+                                setFormGeometria({
+                                  ...formGeometria,
+                                  altura_o_profundidad: e.target.value,
+                                })
+                              }
+                              placeholder="Metadato (Ej. Altura 60m / Profundidad 4m)"
+                              className="w-full rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs"
+                            />
+
+                            <button
+                              type="submit"
+                              className="w-full rounded-lg bg-[#D90429] py-2 text-[11px] font-black uppercase text-white"
+                            >
+                              Guardar Trazo en Mapa
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Listado de Polígonos y Trazos guardados */}
+                    <div className="space-y-2">
+                      {geometrias.map((g) => (
+                        <div
+                          key={g.id}
+                          className="rounded-lg border border-neutral-200 p-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[9px] font-black uppercase text-white"
+                              style={{ backgroundColor: g.color }}
+                            >
+                              {g.equipo_especialidad} · {g.tipo_geometria}
+                            </span>
+                            <span className="text-[10px] text-neutral-400">
+                              {(g.coordenadas || []).length} pts
+                            </span>
+                          </div>
+                          <p className="mt-1 font-black text-neutral-900">
+                            {g.titulo}
+                          </p>
+                          {g.metadatos?.altura_o_profundidad && (
+                            <p className="text-[11px] text-neutral-600">
+                              Metadato: {g.metadatos.altura_o_profundidad}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : tabTactico === 'chat' ? (
+                  <div className="flex h-full flex-col">
+                    <div className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 p-2.5">
+                      {chatMensajes.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className="rounded-lg border border-neutral-200 bg-white p-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-neutral-900">
+                              {msg.remitente_nombre}
+                            </span>
+                            {esPmDeEsteCaso && !msg.en_bitacora && (
+                              <button
+                                onClick={() => handlePromoverChatABitacora(msg)}
+                                className="rounded bg-[#0A0A0A] px-1.5 py-0.5 text-[9px] font-black uppercase text-[#F2B632]"
+                              >
+                                + Bitácora
+                              </button>
+                            )}
+                          </div>
+                          <p className="mt-1 text-neutral-700">{msg.mensaje}</p>
+                          {msg.foto_url && (
+                            <img
+                              src={msg.foto_url}
+                              alt="Evidencia"
+                              className="mt-1.5 max-h-28 rounded object-cover"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {estoyAutorizadoEnCaso && (
+                      <form
+                        onSubmit={handleEnviarChat}
+                        className="mt-2 flex items-center gap-1.5"
+                      >
+                        <label className="cursor-pointer rounded-lg border border-neutral-300 bg-white p-2">
+                          <Camera size={15} />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) =>
+                              setFotoChat(e.target.files?.[0] || null)
+                            }
+                            className="hidden"
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          value={nuevoMensaje}
+                          onChange={(e) => setNuevoMensaje(e.target.value)}
+                          placeholder="Mensaje táctico..."
+                          className="flex-1 rounded-lg border border-neutral-300 px-2.5 py-2 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          disabled={enviandoChat}
+                          className="rounded-lg bg-[#D90429] p-2 text-white"
+                        >
+                          <Send size={14} />
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                ) : tabTactico === 'bitacora' ? (
+                  <div className="space-y-3">
+                    <button
+                      onClick={exportarBitacoraImprimible}
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2 text-[11px] font-black uppercase text-[#F2B632]"
+                    >
+                      <Printer size={14} /> Exportar Bitácora PDF
+                    </button>
+
+                    {esPmDeEsteCaso && (
+                      <form
+                        onSubmit={handleAgregarBitacora}
+                        className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      >
+                        <input
+                          type="text"
+                          required
+                          value={nuevaEntradaBitacora.titulo}
+                          onChange={(e) =>
+                            setNuevaEntradaBitacora({
+                              ...nuevaEntradaBitacora,
+                              titulo: e.target.value,
+                            })
+                          }
+                          placeholder="Hito..."
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        />
+                        <input
+                          type="text"
+                          required
+                          value={nuevaEntradaBitacora.detalle}
+                          onChange={(e) =>
+                            setNuevaEntradaBitacora({
+                              ...nuevaEntradaBitacora,
+                              detalle: e.target.value,
+                            })
+                          }
+                          placeholder="Detalle..."
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-lg bg-[#D90429] py-1.5 text-[11px] font-black uppercase text-white"
+                        >
+                          Agregar a Bitácora
+                        </button>
+                      </form>
+                    )}
+
+                    <div className="space-y-2">
+                      {bitacora.map((b) => (
+                        <div
+                          key={b.id}
+                          className="rounded-lg border-l-4 border-[#0A0A0A] bg-neutral-50 p-2.5"
+                        >
+                          <p className="font-black text-neutral-900">
+                            {b.titulo}
+                          </p>
+                          <p className="text-neutral-700">{b.detalle}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : tabTactico === 'puesto_mando' ? (
+                  <div className="space-y-3">
+                    {esMandoGlobal && puestoMando.length < 5 && (
+                      <form
+                        onSubmit={handleAgregarPuestoMando}
+                        className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      >
+                        <select
+                          required
+                          value={nuevoPmId}
+                          onChange={(e) => setNuevoPmId(e.target.value)}
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        >
+                          <option value="">Asignar a PM ({puestoMando.length}/5)...</option>
+                          {efectivosSinPostulantes
+                            .filter(
+                              (ef) =>
+                                !puestoMando.some((pm) => pm.perfil_id === ef.id)
+                            )
+                            .map((ef) => (
+                              <option key={ef.id} value={ef.id}>
+                                {ef.nombre_completo}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="submit"
+                          className="w-full rounded-lg bg-[#0A0A0A] py-1.5 text-[11px] font-black uppercase text-[#F2B632]"
+                        >
+                          Confirmar PM
+                        </button>
+                      </form>
+                    )}
+
+                    {puestoMando.map((pm, idx) => (
+                      <div
+                        key={pm.id}
+                        className="flex items-center justify-between rounded-lg border border-neutral-200 p-2.5"
+                      >
+                        <div>
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-800">
+                            PM #{idx + 1}
+                          </span>
+                          <p className="font-black text-neutral-900">
+                            {pm.perfiles?.nombre_completo}
+                          </p>
+                        </div>
+                        {esMandoGlobal && (
+                          <button
+                            onClick={() => handleQuitarPuestoMando(pm.id)}
+                            className="text-neutral-400 hover:text-[#D90429]"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : tabTactico === 'cuadrillas' ? (
+                  <div className="space-y-3">
+                    {puedeCrearCuadrilla && (
+                      <form
+                        onSubmit={handleCrearCuadrilla}
+                        className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                      >
+                        <input
+                          type="text"
+                          required
+                          value={nuevaCuadrilla.nombre_cuadrilla}
+                          onChange={(e) =>
+                            setNuevaCuadrilla({
+                              ...nuevaCuadrilla,
+                              nombre_cuadrilla: e.target.value,
+                            })
+                          }
+                          placeholder="Nombre Cuadrilla (Ej. Alfa)"
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        />
+                        <select
+                          required
+                          value={nuevaCuadrilla.jefe_cuadrilla_id}
+                          onChange={(e) =>
+                            setNuevaCuadrilla({
+                              ...nuevaCuadrilla,
+                              jefe_cuadrilla_id: e.target.value,
+                            })
+                          }
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                        >
+                          <option value="">Jefe de Cuadrilla (JC)...</option>
+                          {candidatosJC.map((jc) => (
+                            <option key={jc.id} value={jc.id}>
+                              {jc.nombre_completo}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex flex-wrap gap-1">
+                          {efectivos.map((ef) => {
+                            const sel = nuevaCuadrilla.integrantes_ids.includes(
+                              ef.id
+                            );
+                            return (
+                              <button
+                                key={ef.id}
+                                type="button"
+                                onClick={() => toggleIntegranteCuadrilla(ef.id)}
+                                className={`rounded border px-2 py-0.5 text-[10px] font-bold ${sel
+                                    ? 'border-[#0A0A0A] bg-[#0A0A0A] text-[#F2B632]'
+                                    : 'border-neutral-300 bg-white'
+                                  }`}
+                              >
+                                {ef.nombre_completo}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full rounded-lg bg-[#D90429] py-1.5 text-[11px] font-black uppercase text-white"
+                        >
+                          Crear Cuadrilla
+                        </button>
+                      </form>
+                    )}
+
+                    {cuadrillas.map((cuad) => {
+                      const jefe = efectivos.find(
+                        (e) => e.id === cuad.jefe_cuadrilla_id
+                      );
+                      const integrantes = efectivos.filter((e) =>
+                        (cuad.integrantes_ids || []).includes(e.id)
+                      );
+                      const puedeVerFicha =
+                        profile?.id === cuad.jefe_cuadrilla_id || esPmDeEsteCaso;
+                      const abierto = cuadrillaAntecedentesId === cuad.id;
+
+                      return (
+                        <div
+                          key={cuad.id}
+                          className="rounded-lg border border-neutral-200 p-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-black">{cuad.nombre_cuadrilla}</p>
+                              <p className="text-[10px] text-neutral-500">
+                                JC: {jefe?.nombre_completo} ({integrantes.length})
+                              </p>
+                            </div>
+                            {puedeVerFicha && (
+                              <button
+                                onClick={() =>
+                                  setCuadrillaAntecedentesId(
+                                    abierto ? null : cuad.id
+                                  )
+                                }
+                                className="rounded bg-[#0A0A0A] px-2 py-1 text-[9px] font-black uppercase text-[#F2B632]"
+                              >
+                                {abierto ? 'Ocultar' : 'Ficha Médica'}
+                              </button>
+                            )}
+                          </div>
+                          {abierto && puedeVerFicha && (
+                            <div className="mt-2 space-y-1.5 border-t pt-2">
+                              {integrantes.map((intg) => (
+                                <div
+                                  key={intg.id}
+                                  className="rounded bg-red-50 p-2 text-[11px]"
+                                >
+                                  <p className="font-black">
+                                    {intg.nombre_completo} · {intg.tipo_sangre || 'N/R'}
+                                  </p>
+                                  <p className="text-red-800">
+                                    Alergias: {intg.alergias || 'Ninguna'}
+                                  </p>
+                                  <p className="font-bold">
+                                    ICE: {intg.contacto_emergencia_nombre}:{' '}
+                                    {intg.contacto_emergencia_telefono}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* TRIAGE */
+                  <div className="space-y-3">
+                    {puedeRegistrarTriage && (
+                      <form
+                        onSubmit={handleRegistrarTriage}
+                        className="space-y-2 rounded-xl border border-red-200 bg-red-50/50 p-3"
+                      >
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            required
+                            value={nuevoTriage.codigo_paciente}
+                            onChange={(e) =>
+                              setNuevoTriage({
+                                ...nuevoTriage,
+                                codigo_paciente: e.target.value,
+                              })
+                            }
+                            placeholder="Tarjeta (T-01)"
+                            className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                          />
+                          <select
+                            value={nuevoTriage.categoria_triage}
+                            onChange={(e) =>
+                              setNuevoTriage({
+                                ...nuevoTriage,
+                                categoria_triage: e.target.value,
+                              })
+                            }
+                            className="rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-black uppercase"
+                          >
+                            <option value="verde">VERDE</option>
+                            <option value="amarillo">AMARILLO</option>
+                            <option value="rojo">ROJO</option>
+                            <option value="negro">NEGRO</option>
+                          </select>
+                        </div>
+                        <input
+                          type="text"
+                          value={nuevoTriage.nombre_paciente}
+                          onChange={(e) =>
+                            setNuevoTriage({
+                              ...nuevoTriage,
+                              nombre_paciente: e.target.value,
+                            })
+                          }
+                          placeholder="Nombre o NN"
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={nuevoTriage.signos_vitales}
+                          onChange={(e) =>
+                            setNuevoTriage({
+                              ...nuevoTriage,
+                              signos_vitales: e.target.value,
+                            })
+                          }
+                          placeholder="Signos vitales / Lesiones"
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full rounded-lg bg-[#D90429] py-1.5 text-[11px] font-black uppercase text-white"
+                        >
+                          Guardar Triage
+                        </button>
+                      </form>
+                    )}
+
+                    {triages.map((tri) => {
+                      const st =
+                        TRIAGE_ESTILOS[tri.categoria_triage] ||
+                        TRIAGE_ESTILOS.amarillo;
+                      return (
+                        <div
+                          key={tri.id}
+                          className="rounded-lg border border-neutral-200 p-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-black">
+                              [{tri.codigo_paciente}] {tri.nombre_paciente}
+                            </span>
+                            <span
+                              className={`rounded border px-1.5 py-0.5 text-[9px] font-black uppercase ${st.badge}`}
+                            >
+                              {tri.categoria_triage}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-neutral-600">
+                            {tri.signos_vitales || 'Sin detalle'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* CAJÓN INFERIOR COLAPSABLE DE CHAT RÁPIDO EN CELULAR */}
+              {selectedOp && tabTactico !== 'chat' && (
+                <div className="border-t border-neutral-200 bg-neutral-950 text-white lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setChatAbiertoMovil(!chatAbiertoMovil)}
+                    className="flex w-full items-center justify-between px-4 py-2 text-[11px] font-black uppercase text-[#F2B632]"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <MessageSquare size={13} /> Chat Táctico Rápido ({chatMensajes.length})
+                    </span>
+                    {chatAbiertoMovil ? (
+                      <ChevronDown size={15} />
+                    ) : (
+                      <ChevronUp size={15} />
+                    )}
+                  </button>
+
+                  {chatAbiertoMovil && (
+                    <div className="max-h-44 space-y-2 overflow-y-auto bg-neutral-900 p-3 text-xs">
+                      {chatMensajes.slice(-5).map((m) => (
+                        <div key={m.id} className="rounded bg-white/10 p-2">
+                          <strong className="text-[#F2B632]">
+                            {m.remitente_nombre}:
+                          </strong>{' '}
+                          <span>{m.mensaje}</span>
+                        </div>
+                      ))}
+                      {estoyAutorizadoEnCaso && (
+                        <form onSubmit={handleEnviarChat} className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={nuevoMensaje}
+                            onChange={(e) => setNuevoMensaje(e.target.value)}
+                            placeholder="Escribir..."
+                            className="flex-1 rounded bg-white px-2.5 py-1.5 text-xs text-black"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded bg-[#D90429] px-3 py-1.5 text-xs font-black"
+                          >
+                            Enviar
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================
+            PANEL DERECHO: MAPA TOPOGRÁFICO SIEMPRE VISIBLE + BUSCADOR DE DIRECCIONES
+           ======================================================================== */}
+        <div className="relative z-10 h-[52%] w-full bg-neutral-200 lg:h-full lg:flex-1">
+          {/* Buscador Flotante de Direcciones / Coordenadas */}
+          <div className="absolute left-12 right-3 top-3 z-[450] max-w-md">
+            <form
+              onSubmit={handleBuscarDireccion}
+              className="flex items-center overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white shadow-xl"
+            >
+              <input
+                type="text"
+                value={busquedaMapa}
+                onChange={(e) => setBusquedaMapa(e.target.value)}
+                placeholder="Buscar dirección, cerro, comuna o lat, lng..."
+                className="flex-1 px-3.5 py-2 text-xs font-bold text-neutral-900 outline-none"
+              />
+              <button
+                type="submit"
+                disabled={buscandoDir}
+                className="bg-[#0A0A0A] px-3.5 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
+              >
+                <Search size={15} />
+              </button>
+            </form>
+
+            {resultadosBusqueda.length > 0 && (
+              <div className="mt-1 overflow-hidden rounded-xl border border-neutral-300 bg-white shadow-xl">
+                {resultadosBusqueda.map((r) => (
+                  <button
+                    key={r.place_id}
+                    type="button"
+                    onClick={() => {
+                      const lat = parseFloat(r.lat);
+                      const lng = parseFloat(r.lon);
+                      if (mapInstanceRef.current) {
+                        mapInstanceRef.current.setView([lat, lng], 15);
+                      }
+                      setCoordenadasPinchadas({ lat, lng });
+                      setResultadosBusqueda([]);
+                    }}
+                    className="block w-full border-b border-neutral-100 px-3.5 py-2 text-left text-[11px] font-semibold text-neutral-800 hover:bg-neutral-100"
+                  >
+                    {r.display_name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+
+          {/* Leyenda Táctica Flotante */}
+          <div className="absolute bottom-4 left-3 z-[450] hidden rounded-xl border border-neutral-300 bg-white/95 px-3 py-2 text-[10px] font-black shadow-lg sm:flex sm:items-center sm:gap-3">
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#D90429]" /> DO / Caso
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#1D4ED8]" /> JC / Drone
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#059669]" /> Méd / Track
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FACC15] border border-black" /> Externo QR
+            </span>
+          </div>
+
+          <div ref={mapContainerRef} className="h-full w-full" />
         </div>
       </div>
 
-      {/* MODAL 1: CREAR OPERATIVO REAL O SIMULACRO */}
+      {/* MODAL CREAR OPERATIVO */}
       {showModalCrear && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
           <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
@@ -1235,9 +3065,9 @@ export default function CentralMando() {
                       <label
                         key={ef.id}
                         className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-1.5 text-xs font-bold ${seleccionado
-                          ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                          : 'border-neutral-200 bg-white text-neutral-700'
-                          } ${bloqueado ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
+                            : 'border-neutral-200 bg-white text-neutral-700'
+                          } ${bloqueado ? 'cursor-not-allowed opacity-40' : ''}`}
                       >
                         <span className="flex items-center gap-2">
                           <input
@@ -1274,1033 +3104,6 @@ export default function CentralMando() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: SALA TÁCTICA COMPLETA */}
-      {selectedOp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-5">
-          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            {/* Header Sala Táctica */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 bg-[#0A0A0A] px-5 py-4 text-white">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded bg-[#F2B632] px-2 py-0.5 text-[10px] font-black uppercase text-black">
-                    {selectedOp.tipo_operativo === 'simulacro'
-                      ? 'Simulacro'
-                      : 'Operativo Real'}
-                  </span>
-                  <span className="text-[11px] font-bold text-neutral-400">
-                    Cód. Invitación: {selectedOp.codigo_invitacion}
-                  </span>
-                </div>
-                <h3 className="mt-1 text-lg font-black">{selectedOp.titulo}</h3>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {estoyAutorizadoEnCaso && (
-                  <button
-                    onClick={toggleTracking}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black uppercase ${trackingActivo
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-[#D90429] text-white'
-                      }`}
-                  >
-                    <Navigation size={15} />
-                    {trackingActivo ? 'Trakeo GPS Activo' : 'Iniciar mi Trakeo GPS'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setSelectedOp(null)}
-                  className="rounded-lg bg-white/10 p-1.5 text-white hover:bg-white/20"
-                >
-                  <X size={20} strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
-
-            {/* Navegación Interna de la Sala Táctica */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-5 py-2.5">
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  {
-                    key: 'despliegue',
-                    label: `Personal y QR (${participantes.length + invitadosExt.length})`,
-                    icon: Users,
-                  },
-                  {
-                    key: 'waypoints',
-                    label: `Puntos Estratégicos (${waypoints.length})`,
-                    icon: MapPin,
-                  },
-                  {
-                    key: 'chat',
-                    label: `Chat y Fotos (${chatMensajes.length})`,
-                    icon: MessageSquare,
-                  },
-                  {
-                    key: 'bitacora',
-                    label: `Bitácora (${bitacora.length})`,
-                    icon: BookOpen,
-                  },
-                  {
-                    key: 'puesto_mando',
-                    label: `Puesto Mando (${puestoMando.length}/5)`,
-                    icon: Shield,
-                  },
-                  {
-                    key: 'cuadrillas',
-                    label: `Cuadrillas JC (${cuadrillas.length})`,
-                    icon: Eye,
-                  },
-                  {
-                    key: 'triage',
-                    label: `Triage (${triages.length})`,
-                    icon: HeartPulse,
-                  },
-                ].map((t) => {
-                  const Icon = t.icon;
-                  return (
-                    <button
-                      key={t.key}
-                      onClick={() => setTabTactico(t.key)}
-                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase transition-colors ${tabTactico === t.key
-                        ? 'bg-[#0A0A0A] text-[#F2B632]'
-                        : 'border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100'
-                        }`}
-                    >
-                      <Icon size={13} strokeWidth={2.5} />
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {esPmDeEsteCaso && (
-                <div className="flex items-center gap-1">
-                  {['pendiente', 'en_curso', 'finalizado'].map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => handleCambiarEstadoOp(selectedOp.id, st)}
-                      className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${selectedOp.estado === st
-                        ? 'border-[#D90429] bg-[#D90429] text-white'
-                        : 'border-neutral-300 bg-white text-neutral-600'
-                        }`}
-                    >
-                      {st.replace('_', ' ')}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {alertaTactica && (
-              <div className="mx-5 mt-3 rounded-xl border-l-4 border-[#D90429] bg-red-50 p-3 text-xs font-bold text-red-900">
-                {alertaTactica}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto p-5">
-              {loadingDetalle ? (
-                <p className="py-10 text-center text-xs font-bold text-neutral-500">
-                  Sincronizando sala táctica...
-                </p>
-              ) : tabTactico === 'despliegue' ? (
-                /* PESTAÑA 1: SOLICITUDES, POSTULANTES/VOLUNTARIOS E INVITADOS QR */
-                <div className="space-y-6">
-                  {/* Banner de solicitud para voluntarios / postulantes */}
-                  {!esPmDeEsteCaso && (
-                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                      <div>
-                        <h4 className="text-sm font-black text-neutral-950">
-                          Participación en este Operativo
-                        </h4>
-                        <p className="text-xs text-neutral-600">
-                          {!miParticipacion
-                            ? rol === 'postulante'
-                              ? 'Como Postulante puedes solicitar unirte como Oyente o Apoyo Logístico.'
-                              : 'Solicita autorización al Puesto de Mando para desplegarte y activar tu trakeo GPS.'
-                            : `Estado de tu solicitud: ${miParticipacion.estado.toUpperCase()} (${miParticipacion.funcion_terreno
-                            })`}
-                        </p>
-                      </div>
-                      {!miParticipacion && (
-                        <button
-                          onClick={handleSolicitarUnirme}
-                          className="rounded-xl bg-[#D90429] px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-red-700"
-                        >
-                          Solicitar Unirme al Caso
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Tarjeta QR Interoperabilidad Multi-Agencia (Visible para PM / DO / DG / SA) */}
-                  {esPmDeEsteCaso && (
-                    <div className="grid grid-cols-1 gap-4 rounded-2xl border-2 border-[#0A0A0A] bg-neutral-950 p-5 text-white md:grid-cols-3">
-                      <div className="space-y-2 md:col-span-2">
-                        <span className="inline-flex items-center gap-1.5 rounded bg-[#F2B632] px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
-                          <QrCode size={13} /> Acceso Provisorio Multi-Agencia
-                        </span>
-                        <h4 className="text-base font-black uppercase">
-                          Invitar Unidades Externas (Bomberos, Socorro Andino,
-                          Municipios)
-                        </h4>
-                        <p className="text-xs text-neutral-300">
-                          Comparte este enlace o muestra el QR para que
-                          rescatistas externos ingresen con Nombre, RUT y
-                          Organización. Quedarán en espera hasta que los
-                          autorices aquí abajo.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                          <input
-                            type="text"
-                            readOnly
-                            value={urlInvitacionActual}
-                            className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-mono text-neutral-200"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(urlInvitacionActual);
-                              setCopiadoLink(true);
-                              setTimeout(() => setCopiadoLink(false), 2000);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white"
-                          >
-                            {copiadoLink ? (
-                              <>
-                                <Check size={14} /> Copiado
-                              </>
-                            ) : (
-                              <>
-                                <Copy size={14} /> Copiar Link
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {qrDataUrl && (
-                        <div className="flex flex-col items-center justify-center rounded-xl bg-white p-3 text-black">
-                          <img
-                            src={qrDataUrl}
-                            alt="QR Invitación Operativo"
-                            className="h-32 w-32"
-                          />
-                          <span className="mt-1 text-[10px] font-black uppercase">
-                            Escanear en Terreno
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Asignación Directa de Voluntarios o Postulantes por PM */}
-                  {esPmDeEsteCaso && (
-                    <form
-                      onSubmit={handleAsignarParticipanteDirecto}
-                      className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:flex-row"
-                    >
-                      <select
-                        required
-                        value={invitarInternoId}
-                        onChange={(e) => setInvitarInternoId(e.target.value)}
-                        className="flex-1 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                      >
-                        <option value="">
-                          Invitar / Asignar Voluntario o Postulante BRE...
-                        </option>
-                        {efectivos.map((ef) => (
-                          <option key={ef.id} value={ef.id}>
-                            {ef.nombre_completo} ({ef.rol.toUpperCase()})
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={invitarFuncion}
-                        onChange={(e) => setInvitarFuncion(e.target.value)}
-                        className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                      >
-                        <option value="Búsqueda y Rescate">
-                          Búsqueda y Rescate
-                        </option>
-                        <option value="Oyente / Observador">
-                          Oyente / Observador (Postulante)
-                        </option>
-                        <option value="Apoyo Logístico Base">
-                          Apoyo Logístico Base
-                        </option>
-                        <option value="Instrucción en Terreno">
-                          Instrucción en Terreno
-                        </option>
-                      </select>
-
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632]"
-                      >
-                        Asignar al Caso
-                      </button>
-                    </form>
-                  )}
-
-                  {/* Listado de Efectivos Internos (Voluntarios y Postulantes) */}
-                  <div>
-                    <h4 className="mb-2 text-xs font-black uppercase text-neutral-700">
-                      Efectivos Internos BRE ({participantes.length})
-                    </h4>
-                    <div className="space-y-2">
-                      {participantes.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-3 text-xs"
-                        >
-                          <div>
-                            <span className="font-black text-neutral-900">
-                              {p.perfiles?.nombre_completo}
-                            </span>{' '}
-                            <span className="rounded bg-neutral-100 px-2 py-0.5 text-[10px] font-black uppercase">
-                              {p.perfiles?.rol} · {p.funcion_terreno}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${p.estado === 'autorizado'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                                }`}
-                            >
-                              {p.estado}
-                            </span>
-                            {esPmDeEsteCaso && p.estado === 'solicitado' && (
-                              <>
-                                <button
-                                  onClick={() =>
-                                    handleAutorizarParticipante(
-                                      p.id,
-                                      'autorizado'
-                                    )
-                                  }
-                                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black uppercase text-white"
-                                >
-                                  Autorizar
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleAutorizarParticipante(
-                                      p.id,
-                                      'rechazado'
-                                    )
-                                  }
-                                  className="rounded-lg bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase text-white"
-                                >
-                                  Rechazar
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Listado de Invitados Provisorios Externos */}
-                  <div>
-                    <h4 className="mb-2 text-xs font-black uppercase text-neutral-700">
-                      Unidades Externas Invitadas vía QR ({invitadosExt.length})
-                    </h4>
-                    <div className="space-y-2">
-                      {invitadosExt.length === 0 ? (
-                        <p className="text-xs text-neutral-400">
-                          Ninguna unidad externa ha ingresado aún mediante el
-                          enlace QR.
-                        </p>
-                      ) : (
-                        invitadosExt.map((inv) => (
-                          <div
-                            key={inv.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-xs"
-                          >
-                            <div>
-                              <span className="font-black text-neutral-950">
-                                {inv.nombre_completo}
-                              </span>{' '}
-                              <span className="font-semibold text-neutral-600">
-                                ({inv.rut})
-                              </span>
-                              <span className="ml-2 rounded bg-[#0A0A0A] px-2 py-0.5 text-[10px] font-black uppercase text-[#F2B632]">
-                                {inv.organizacion}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-black uppercase text-neutral-700">
-                                {inv.estado}
-                              </span>
-                              {esPmDeEsteCaso && inv.estado === 'pendiente' && (
-                                <>
-                                  <button
-                                    onClick={() =>
-                                      handleAutorizarInvitadoExterno(
-                                        inv.id,
-                                        'autorizado'
-                                      )
-                                    }
-                                    className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black uppercase text-white"
-                                  >
-                                    Autorizar Acceso
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleAutorizarInvitadoExterno(
-                                        inv.id,
-                                        'rechazado'
-                                      )
-                                    }
-                                    className="rounded-lg bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase text-white"
-                                  >
-                                    Rechazar
-                                  </button>
-                                </>
-                              )}
-                              {esPmDeEsteCaso && inv.estado === 'autorizado' && (
-                                <button
-                                  onClick={() =>
-                                    handleAutorizarInvitadoExterno(
-                                      inv.id,
-                                      'revocado'
-                                    )
-                                  }
-                                  className="rounded-lg border border-red-300 px-2 py-1 text-[10px] font-black uppercase text-red-700"
-                                >
-                                  Revocar
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : tabTactico === 'waypoints' ? (
-                /* PESTAÑA 2: PUNTOS ESTRATÉGICOS (LKP, ACANTILADO, INDICIO) */
-                <div className="space-y-5">
-                  {estoyAutorizadoEnCaso && (
-                    <form
-                      onSubmit={handleCrearWaypoint}
-                      className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4"
-                    >
-                      <h4 className="text-xs font-black uppercase text-neutral-900">
-                        Marcar Punto Estratégico en Mapa
-                      </h4>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <select
-                          value={nuevoWp.tipo}
-                          onChange={(e) =>
-                            setNuevoWp({ ...nuevoWp, tipo: e.target.value })
-                          }
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                        >
-                          {TIPOS_WAYPOINT.map((t) => (
-                            <option key={t.key} value={t.key}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          required
-                          value={nuevoWp.titulo}
-                          onChange={(e) =>
-                            setNuevoWp({ ...nuevoWp, titulo: e.target.value })
-                          }
-                          placeholder="Título (Ej. Acantilado 40m / Huella calzado)"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-2"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white"
-                      >
-                        Registrar Punto
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="space-y-2.5">
-                    {waypoints.map((wp) => {
-                      const info =
-                        TIPOS_WAYPOINT.find((t) => t.key === wp.tipo) ||
-                        TIPOS_WAYPOINT[0];
-                      return (
-                        <div
-                          key={wp.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-3.5 text-xs"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="rounded px-2 py-0.5 text-[10px] font-black uppercase text-white"
-                                style={{ backgroundColor: info.color }}
-                              >
-                                {info.label}
-                              </span>
-                              <span className="font-black text-neutral-950">
-                                {wp.titulo}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-[11px] text-neutral-500">
-                              Reportado por:{' '}
-                              {wp.autor_etiqueta ||
-                                wp.perfiles?.nombre_completo}{' '}
-                              · ({wp.latitud.toFixed(4)},{' '}
-                              {wp.longitud.toFixed(4)})
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${wp.validado
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                                }`}
-                            >
-                              {wp.validado
-                                ? 'Visible para Tropa'
-                                : 'Pendiente Validación PM'}
-                            </span>
-
-                            {esPmDeEsteCaso && !wp.validado && (
-                              <button
-                                onClick={() =>
-                                  handleValidarWaypoint(wp.id, true)
-                                }
-                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-black uppercase text-white"
-                              >
-                                Validar Punto
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : tabTactico === 'chat' ? (
-                /* PESTAÑA 3: CHAT TÁCTICO Y EVIDENCIA FOTOGRÁFICA */
-                <div className="flex h-[460px] flex-col">
-                  <div className="flex-1 space-y-2.5 overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                    {chatMensajes.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className="rounded-xl border border-neutral-200 bg-white p-3 text-xs shadow-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-black text-neutral-900">
-                            {msg.remitente_nombre}{' '}
-                            <span className="text-[#D90429]">
-                              [{msg.remitente_unidad}]
-                            </span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-neutral-400">
-                              {new Date(msg.creado_en).toLocaleTimeString(
-                                'es-CL',
-                                { hour: '2-digit', minute: '2-digit' }
-                              )}
-                            </span>
-                            {esPmDeEsteCaso && !msg.en_bitacora && (
-                              <button
-                                onClick={() =>
-                                  handlePromoverChatABitacora(msg)
-                                }
-                                className="rounded bg-[#0A0A0A] px-2 py-0.5 text-[10px] font-black uppercase text-[#F2B632]"
-                              >
-                                + Bitácora
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="mt-1 text-neutral-800">{msg.mensaje}</p>
-                        {msg.foto_url && (
-                          <a
-                            href={msg.foto_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2 inline-block"
-                          >
-                            <img
-                              src={msg.foto_url}
-                              alt="Evidencia terreno"
-                              className="max-h-40 rounded-lg border border-neutral-200 object-cover"
-                            />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {estoyAutorizadoEnCaso && (
-                    <form
-                      onSubmit={handleEnviarChat}
-                      className="mt-3 flex items-center gap-2"
-                    >
-                      <label className="cursor-pointer rounded-xl border border-neutral-300 bg-white p-2.5 text-neutral-700 hover:bg-neutral-100">
-                        <Camera size={18} />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={(e) =>
-                            setFotoChat(e.target.files?.[0] || null)
-                          }
-                          className="hidden"
-                        />
-                      </label>
-                      <input
-                        type="text"
-                        value={nuevoMensaje}
-                        onChange={(e) => setNuevoMensaje(e.target.value)}
-                        placeholder="Escribir reporte táctico o novedad..."
-                        className="flex-1 rounded-xl border border-neutral-300 px-3.5 py-2.5 text-xs font-semibold"
-                      />
-                      <button
-                        type="submit"
-                        disabled={enviandoChat}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-4 py-2.5 text-xs font-black uppercase text-white"
-                      >
-                        <Send size={15} /> Enviar
-                      </button>
-                    </form>
-                  )}
-                </div>
-              ) : tabTactico === 'bitacora' ? (
-                /* PESTAÑA 4: BITÁCORA OFICIAL DEL PUESTO DE MANDO */
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black uppercase text-neutral-800">
-                      Cronología Oficial del Caso
-                    </h4>
-                    <button
-                      onClick={exportarBitacoraImprimible}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3.5 py-2 text-xs font-black uppercase text-[#F2B632]"
-                    >
-                      <Printer size={15} /> Exportar / Imprimir PDF
-                    </button>
-                  </div>
-
-                  {esPmDeEsteCaso && (
-                    <form
-                      onSubmit={handleAgregarBitacora}
-                      className="grid grid-cols-1 gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3"
-                    >
-                      <input
-                        type="text"
-                        required
-                        value={nuevaEntradaBitacora.titulo}
-                        onChange={(e) =>
-                          setNuevaEntradaBitacora({
-                            ...nuevaEntradaBitacora,
-                            titulo: e.target.value,
-                          })
-                        }
-                        placeholder="Hito / Acción (Ej. Despliegue Cuadrilla Alfa)"
-                        className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                      />
-                      <input
-                        type="text"
-                        required
-                        value={nuevaEntradaBitacora.detalle}
-                        onChange={(e) =>
-                          setNuevaEntradaBitacora({
-                            ...nuevaEntradaBitacora,
-                            detalle: e.target.value,
-                          })
-                        }
-                        placeholder="Detalle técnico, sector o novedad..."
-                        className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-2"
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white sm:col-span-3"
-                      >
-                        Registrar en Bitácora Oficial
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="space-y-2">
-                    {bitacora.map((b) => (
-                      <div
-                        key={b.id}
-                        className="rounded-xl border-l-4 border-[#0A0A0A] bg-white p-3.5 shadow-sm text-xs"
-                      >
-                        <div className="flex justify-between font-black text-neutral-900">
-                          <span>{b.titulo}</span>
-                          <span className="text-neutral-400">
-                            {new Date(b.hora_evento).toLocaleString('es-CL')}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-neutral-700">{b.detalle}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : tabTactico === 'puesto_mando' ? (
-                /* PESTAÑA 5: PUESTO DE MANDO (MÁX 5) */
-                <div className="space-y-4">
-                  {esMandoGlobal && puestoMando.length < 5 && (
-                    <form
-                      onSubmit={handleAgregarPuestoMando}
-                      className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:flex-row"
-                    >
-                      <select
-                        required
-                        value={nuevoPmId}
-                        onChange={(e) => setNuevoPmId(e.target.value)}
-                        className="flex-1 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                      >
-                        <option value="">
-                          Asignar efectivo al Puesto de Mando...
-                        </option>
-                        {efectivosSinPostulantes
-                          .filter(
-                            (ef) =>
-                              !puestoMando.some((pm) => pm.perfil_id === ef.id)
-                          )
-                          .map((ef) => (
-                            <option key={ef.id} value={ef.id}>
-                              {ef.nombre_completo}
-                            </option>
-                          ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={nuevoPmTurno}
-                        onChange={(e) => setNuevoPmTurno(e.target.value)}
-                        placeholder="Turno"
-                        className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold sm:w-40"
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632]"
-                      >
-                        Asignar ({puestoMando.length}/5)
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {puestoMando.map((pm, idx) => (
-                      <div
-                        key={pm.id}
-                        className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3.5"
-                      >
-                        <div>
-                          <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
-                            PM #{idx + 1} · {pm.turno}
-                          </span>
-                          <h4 className="mt-1 font-black text-neutral-900">
-                            {pm.perfiles?.nombre_completo}
-                          </h4>
-                        </div>
-                        {esMandoGlobal && (
-                          <button
-                            onClick={() => handleQuitarPuestoMando(pm.id)}
-                            className="text-neutral-400 hover:text-[#D90429]"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : tabTactico === 'cuadrillas' ? (
-                /* PESTAÑA 6: CUADRILLAS Y ANTECEDENTES MÉDICOS PARA JC */
-                <div className="space-y-4">
-                  {puedeCrearCuadrilla && (
-                    <form
-                      onSubmit={handleCrearCuadrilla}
-                      className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4"
-                    >
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <input
-                          type="text"
-                          required
-                          value={nuevaCuadrilla.nombre_cuadrilla}
-                          onChange={(e) =>
-                            setNuevaCuadrilla({
-                              ...nuevaCuadrilla,
-                              nombre_cuadrilla: e.target.value,
-                            })
-                          }
-                          placeholder="Nombre Cuadrilla (Ej. Alfa)"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                        />
-                        <select
-                          required
-                          value={nuevaCuadrilla.jefe_cuadrilla_id}
-                          onChange={(e) =>
-                            setNuevaCuadrilla({
-                              ...nuevaCuadrilla,
-                              jefe_cuadrilla_id: e.target.value,
-                            })
-                          }
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                        >
-                          <option value="">
-                            Jefe de Cuadrilla (JC)...
-                          </option>
-                          {candidatosJC.map((jc) => (
-                            <option key={jc.id} value={jc.id}>
-                              {jc.nombre_completo}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1.5">
-                        {efectivos.map((ef) => {
-                          const sel = nuevaCuadrilla.integrantes_ids.includes(
-                            ef.id
-                          );
-                          return (
-                            <button
-                              key={ef.id}
-                              type="button"
-                              onClick={() => toggleIntegranteCuadrilla(ef.id)}
-                              className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${sel
-                                ? 'border-[#0A0A0A] bg-[#0A0A0A] text-[#F2B632]'
-                                : 'border-neutral-300 bg-white text-neutral-700'
-                                }`}
-                            >
-                              {ef.nombre_completo}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white"
-                      >
-                        Crear Cuadrilla
-                      </button>
-                    </form>
-                  )}
-
-                  {cuadrillas.map((cuad) => {
-                    const jefe = efectivos.find(
-                      (e) => e.id === cuad.jefe_cuadrilla_id
-                    );
-                    const integrantes = efectivos.filter((e) =>
-                      (cuad.integrantes_ids || []).includes(e.id)
-                    );
-                    const puedeVerFicha =
-                      profile?.id === cuad.jefe_cuadrilla_id || esPmDeEsteCaso;
-                    const abierto = cuadrillaAntecedentesId === cuad.id;
-
-                    return (
-                      <div
-                        key={cuad.id}
-                        className="rounded-xl border border-neutral-200 bg-white p-4"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-black text-neutral-950">
-                              {cuad.nombre_cuadrilla}
-                            </h4>
-                            <p className="text-xs text-neutral-600">
-                              JC: {jefe?.nombre_completo} · {integrantes.length}{' '}
-                              efectivos
-                            </p>
-                          </div>
-                          {puedeVerFicha && (
-                            <button
-                              onClick={() =>
-                                setCuadrillaAntecedentesId(
-                                  abierto ? null : cuad.id
-                                )
-                              }
-                              className="rounded-xl bg-[#0A0A0A] px-3 py-1.5 text-xs font-black uppercase text-[#F2B632]"
-                            >
-                              {abierto ? 'Ocultar' : 'Antecedentes Médicos'}
-                            </button>
-                          )}
-                        </div>
-
-                        {abierto && puedeVerFicha && (
-                          <div className="mt-3 grid grid-cols-1 gap-2 border-t border-neutral-100 pt-3 sm:grid-cols-2">
-                            {integrantes.map((intg) => (
-                              <div
-                                key={intg.id}
-                                className="rounded-xl border border-red-200 bg-red-50/50 p-3 text-xs"
-                              >
-                                <p className="font-black">
-                                  {intg.nombre_completo} · Sangre:{' '}
-                                  {intg.tipo_sangre || 'N/R'}
-                                </p>
-                                <p className="text-red-800">
-                                  Alergias: {intg.alergias || 'Ninguna'}
-                                </p>
-                                <p className="font-bold">
-                                  <PhoneCall size={11} className="inline mr-1" />
-                                  {intg.contacto_emergencia_nombre || 'N/R'}:{' '}
-                                  {intg.contacto_emergencia_telefono || 'N/R'}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* PESTAÑA 7: TRIAGE MÉDICO PREHOSPITALARIO */
-                <div className="space-y-4">
-                  {puedeRegistrarTriage && (
-                    <form
-                      onSubmit={handleRegistrarTriage}
-                      className="space-y-2 rounded-2xl border border-red-200 bg-red-50/40 p-4"
-                    >
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                        <input
-                          type="text"
-                          required
-                          value={nuevoTriage.codigo_paciente}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              codigo_paciente: e.target.value,
-                            })
-                          }
-                          placeholder="Cód. Tarjeta (T-01)"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
-                        />
-                        <input
-                          type="text"
-                          value={nuevoTriage.nombre_paciente}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              nombre_paciente: e.target.value,
-                            })
-                          }
-                          placeholder="Nombre o NN"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={nuevoTriage.edad_aprox}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              edad_aprox: e.target.value,
-                            })
-                          }
-                          placeholder="Edad aprox."
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs"
-                        />
-                        <select
-                          value={nuevoTriage.categoria_triage}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              categoria_triage: e.target.value,
-                            })
-                          }
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase"
-                        >
-                          <option value="verde">VERDE</option>
-                          <option value="amarillo">AMARILLO</option>
-                          <option value="rojo">ROJO</option>
-                          <option value="negro">NEGRO</option>
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          value={nuevoTriage.signos_vitales}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              signos_vitales: e.target.value,
-                            })
-                          }
-                          placeholder="Signos vitales"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={nuevoTriage.lesiones_hallazgos}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              lesiones_hallazgos: e.target.value,
-                            })
-                          }
-                          placeholder="Hallazgos"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={nuevoTriage.centro_derivacion}
-                          onChange={(e) =>
-                            setNuevoTriage({
-                              ...nuevoTriage,
-                              centro_derivacion: e.target.value,
-                            })
-                          }
-                          placeholder="Derivación"
-                          className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white"
-                      >
-                        Guardar Caso Triage
-                      </button>
-                    </form>
-                  )}
-
-                  {triages.map((tri) => {
-                    const st =
-                      TRIAGE_ESTILOS[tri.categoria_triage] ||
-                      TRIAGE_ESTILOS.amarillo;
-                    return (
-                      <div
-                        key={tri.id}
-                        className="rounded-xl border border-neutral-200 bg-white p-3.5 text-xs"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-black">
-                            [{tri.codigo_paciente}] {tri.nombre_paciente}
-                          </span>
-                          <span
-                            className={`rounded border px-2 py-0.5 text-[10px] font-black uppercase ${st.badge}`}
-                          >
-                            {st.label}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-neutral-600">
-                          Signos: {tri.signos_vitales || 'N/R'} · Hallazgos:{' '}
-                          {tri.lesiones_hallazgos || 'N/R'} · Derivación:{' '}
-                          {tri.centro_derivacion || 'N/R'}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
