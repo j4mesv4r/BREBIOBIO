@@ -137,12 +137,16 @@ export default function GestionDirectorio() {
       supabase
         .from('perfiles')
         .select('*')
-        .order('created_at', { ascending: false }),
+        .order('nombre_completo', { ascending: true }),
     ]);
 
     if (!certsRes.error && certsRes.data) setCertificados(certsRes.data);
     if (!solRes.error && solRes.data) setSolicitudes(solRes.data);
-    if (!perfRes.error && perfRes.data) setMiembros(perfRes.data);
+    if (!perfRes.error && perfRes.data) {
+      setMiembros(perfRes.data);
+    } else if (perfRes.error) {
+      setAlerta(`Error cargando perfiles: ${perfRes.error.message}`);
+    }
     setLoading(false);
   };
 
@@ -594,50 +598,50 @@ export default function GestionDirectorio() {
                   </div>
                 </div>
 
-                {/* Panel Desplegable: Ficha Completa del Postulante/Miembro + Cargos + Visibilidad */}
+                {/* Panel Desplegable: Ficha Completa + Cargos + Visibilidad + Foto Superadmin */}
                 {expandido && (
                   <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
-                    {/* Bloque 0: Antecedentes Completos Ingresados por el Postulante/Voluntario */}
+                    {/* Bloque 0: Antecedentes Completos */}
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
                       <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
                         <User size={15} strokeWidth={2.5} className="text-[#D90429]" />
                         Ficha Completa de Antecedentes (Revisión para Autorización)
                       </h4>
                       <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
-                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
                           <span className="block text-[10px] font-black uppercase text-neutral-400">
                             Ubicación
                           </span>
-                          <span className="font-bold text-neutral-800 flex items-center gap-1 mt-0.5">
+                          <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
                             <MapPin size={13} className="text-[#D90429]" />
                             {m.region || 'Región del Biobío'} · {m.comuna || 'Sin comuna'}
                           </span>
                         </div>
-                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
                           <span className="block text-[10px] font-black uppercase text-neutral-400">
                             Salud y Sangre
                           </span>
-                          <span className="font-bold text-red-700 flex items-center gap-1 mt-0.5">
+                          <span className="mt-0.5 flex items-center gap-1 font-bold text-red-700">
                             <HeartPulse size={13} />
                             Sangre: {m.tipo_sangre || 'No especificado'} · Alergias:{' '}
                             {m.alergias || 'Ninguna'}
                           </span>
                         </div>
-                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
                           <span className="block text-[10px] font-black uppercase text-neutral-400">
                             Contacto Emergencia (ICE)
                           </span>
-                          <span className="font-bold text-neutral-800 flex items-center gap-1 mt-0.5">
+                          <span className="mt-0.5 flex items-center gap-1 font-bold text-neutral-800">
                             <PhoneCall size={13} className="text-emerald-600" />
                             {m.contacto_emergencia_nombre || 'N/R'} (
                             {m.contacto_emergencia_telefono || 'N/R'})
                           </span>
                         </div>
-                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200 sm:col-span-3">
+                        <div className="rounded-lg border border-neutral-200 bg-white p-2.5 sm:col-span-3">
                           <span className="block text-[10px] font-black uppercase text-neutral-400">
                             Especialidades y Áreas Declaradas
                           </span>
-                          <span className="font-bold text-neutral-800 mt-0.5 block">
+                          <span className="mt-0.5 block font-bold text-neutral-800">
                             {especialidadesLista || 'Sin especialidades registradas'}
                           </span>
                         </div>
