@@ -12,6 +12,10 @@ import {
   BadgeCheck,
   Camera,
   Download,
+  User,
+  PhoneCall,
+  HeartPulse,
+  MapPin,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -37,7 +41,7 @@ const CATALOGO_CARGOS = [
     label: 'Director Operativo',
     corto: 'DO',
     unico: false,
-    descripcion: 'Mando operativo · Designa DOs, JC, LEM y Puesto de Mando',
+    descripcion: 'Mando operativo · Designa DOs, JC, LEM, Instructor y Puesto de Mando',
   },
   {
     key: 'dos',
@@ -66,6 +70,13 @@ const CATALOGO_CARGOS = [
     corto: 'PREHOSP',
     unico: false,
     descripcion: 'Designado por SA, DG, DO o LEM · Ingresa casos de Triage',
+  },
+  {
+    key: 'instructor',
+    label: 'Instructor',
+    corto: 'INST',
+    unico: false,
+    descripcion: 'Coordina formación, academias y simulacros operativos',
   },
 ];
 
@@ -105,7 +116,7 @@ export default function GestionDirectorio() {
 
   const puedeAsignarCargo = (claveCargo) => {
     if (esSA || esDG) return true;
-    if (esDO && ['dos', 'jc', 'prehospitalario'].includes(claveCargo))
+    if (esDO && ['dos', 'jc', 'prehospitalario', 'instructor'].includes(claveCargo))
       return true;
     if (esLEM && claveCargo === 'prehospitalario') return true;
     return false;
@@ -284,7 +295,6 @@ export default function GestionDirectorio() {
     }
   };
 
-  // Exclusivo Superadmin: Subir o reemplazar fotografía institucional / uniformada
   const handleAdminSubirFotoMiembro = async (miembroId, file) => {
     if (!esSA || !file) return;
     setAlerta('');
@@ -334,7 +344,7 @@ export default function GestionDirectorio() {
   return (
     <DashboardLayout
       title="Gestión de Directorio y Cargos"
-      subtitle="Control de los 4 roles institucionales, cargos operativos múltiples y visibilidad fiscalizable"
+      subtitle="Control de los 4 roles institucionales, revisión completa de postulantes y cargos operativos"
       actions={
         <div className="flex items-center gap-2">
           {cargosActuales.map((c) => (
@@ -375,7 +385,7 @@ export default function GestionDirectorio() {
               : 'border-transparent text-neutral-500 hover:text-neutral-900'
             }`}
         >
-          Miembros y Cargos (
+          Miembros y Postulantes (
           {miembros.filter((m) => m.estado_validacion === 'pendiente').length}{' '}
           pendientes)
         </button>
@@ -410,9 +420,10 @@ export default function GestionDirectorio() {
             const cargosMiembro = Array.isArray(m.cargos_operativos)
               ? m.cargos_operativos
               : [];
-            const especialidadesLista = Array.isArray(m.especialidades) && m.especialidades.length > 0
-              ? m.especialidades.join(' · ')
-              : m.especialidad || '';
+            const especialidadesLista =
+              Array.isArray(m.especialidades) && m.especialidades.length > 0
+                ? m.especialidades.join(' · ')
+                : m.especialidad || '';
             const visPublica = m.visibilidad_publica || {
               foto_url: true,
               rut: true,
@@ -436,68 +447,81 @@ export default function GestionDirectorio() {
               >
                 {/* Fila Superior: Identidad + Rol de Sistema + Aprobación */}
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-black text-neutral-950">
-                        {m.nombre_completo || 'Sin nombre'}
-                      </h3>
-
-                      {m.codigo_credencial && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-0.5 text-[11px] font-black tracking-wider text-[#F2B632]">
-                          <BadgeCheck size={13} strokeWidth={2.5} />
-                          {m.codigo_credencial}
-                        </span>
-                      )}
-
-                      <span
-                        className={`rounded-lg px-2.5 py-0.5 text-[11px] font-black uppercase ${m.estado_validacion === 'aprobado'
-                            ? 'bg-green-100 text-green-700'
-                            : m.estado_validacion === 'rechazado'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                      >
-                        {m.estado_validacion || 'pendiente'}
-                      </span>
-
-                      {m.usando_avatar_generico && (
-                        <span className="rounded-lg bg-amber-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-amber-900">
-                          Avatar Genérico (Prórroga {m.prorrogas_avatar_usadas || 0}/2)
-                        </span>
-                      )}
-
-                      {m.es_menor_autorizado && (
-                        <span className="rounded-lg bg-[#F2B632] px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
-                          Menor Autorizado (16-17)
-                        </span>
+                  <div className="flex items-start gap-3.5">
+                    <div className="h-14 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-300 bg-neutral-100">
+                      {m.foto_url ? (
+                        <img
+                          src={m.foto_url}
+                          alt={m.nombre_completo}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <User className="m-auto mt-3 text-neutral-400" size={24} />
                       )}
                     </div>
 
-                    <p className="text-xs font-semibold text-neutral-600">
-                      RUT: {m.rut || 'No registrado'} · Tel:{' '}
-                      {m.telefono || 'Sin teléfono'}
-                      {especialidadesLista ? ` · Especialidades: ${especialidadesLista}` : ''}
-                    </p>
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-black text-neutral-950">
+                          {m.nombre_completo || m.email || 'Sin nombre'}
+                        </h3>
 
-                    {/* Badges de Cargos Activos del Voluntario */}
-                    {cargosMiembro.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {cargosMiembro.map((cargoKey) => {
-                          const info = CATALOGO_CARGOS.find(
-                            (c) => c.key === cargoKey
-                          );
-                          return (
-                            <span
-                              key={cargoKey}
-                              className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-[#D90429]"
-                            >
-                              <Award size={12} strokeWidth={2.5} />
-                              {info ? info.label : cargoKey}
-                            </span>
-                          );
-                        })}
+                        {m.codigo_credencial && (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-0.5 text-[11px] font-black tracking-wider text-[#F2B632]">
+                            <BadgeCheck size={13} strokeWidth={2.5} />
+                            {m.codigo_credencial}
+                          </span>
+                        )}
+
+                        <span
+                          className={`rounded-lg px-2.5 py-0.5 text-[11px] font-black uppercase ${m.estado_validacion === 'aprobado'
+                              ? 'bg-green-100 text-green-700'
+                              : m.estado_validacion === 'rechazado'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                        >
+                          {m.estado_validacion || 'pendiente'}
+                        </span>
+
+                        {!m.onboarding_completado && (
+                          <span className="rounded-lg bg-neutral-200 px-2 py-0.5 text-[10px] font-black uppercase text-neutral-700">
+                            Ficha Incompleta
+                          </span>
+                        )}
+
+                        {m.es_menor_autorizado && (
+                          <span className="rounded-lg bg-[#F2B632] px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
+                            Menor Autorizado (16-17)
+                          </span>
+                        )}
                       </div>
-                    )}
+
+                      <p className="text-xs font-semibold text-neutral-600">
+                        RUT: {m.rut || 'No registrado'} · Tel:{' '}
+                        {m.telefono || 'Sin teléfono'}
+                        {m.email ? ` · Email: ${m.email}` : ''}
+                      </p>
+
+                      {cargosMiembro.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {cargosMiembro.map((cargoKey) => {
+                            const info = CATALOGO_CARGOS.find(
+                              (c) => c.key === cargoKey
+                            );
+                            return (
+                              <span
+                                key={cargoKey}
+                                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-[#D90429]"
+                              >
+                                <Award size={12} strokeWidth={2.5} />
+                                {info ? info.label : cargoKey}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Controles de Rol y Aprobación */}
@@ -536,10 +560,11 @@ export default function GestionDirectorio() {
                                 m,
                                 'aprobado',
                                 rolObjetivo === 'postulante'
-                                  ? 'voluntario'
+                                  ? 'postulante'
                                   : undefined
                               )
                             }
+                            title="Autoriza el ingreso del usuario manteniendo su rol o promoviéndolo"
                             className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
                           >
                             <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
@@ -564,14 +589,61 @@ export default function GestionDirectorio() {
                       }
                       className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
                     >
-                      {expandido ? 'Ocultar Cargos / Foto' : 'Cargos y Visibilidad'}
+                      {expandido ? 'Ocultar Ficha' : 'Ver Ficha y Cargos'}
                     </button>
                   </div>
                 </div>
 
-                {/* Panel Desplegable: Cargos Operativos Múltiples + Visibilidad Pública + Foto Superadmin */}
+                {/* Panel Desplegable: Ficha Completa del Postulante/Miembro + Cargos + Visibilidad */}
                 {expandido && (
                   <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
+                    {/* Bloque 0: Antecedentes Completos Ingresados por el Postulante/Voluntario */}
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
+                      <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                        <User size={15} strokeWidth={2.5} className="text-[#D90429]" />
+                        Ficha Completa de Antecedentes (Revisión para Autorización)
+                      </h4>
+                      <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                          <span className="block text-[10px] font-black uppercase text-neutral-400">
+                            Ubicación
+                          </span>
+                          <span className="font-bold text-neutral-800 flex items-center gap-1 mt-0.5">
+                            <MapPin size={13} className="text-[#D90429]" />
+                            {m.region || 'Región del Biobío'} · {m.comuna || 'Sin comuna'}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                          <span className="block text-[10px] font-black uppercase text-neutral-400">
+                            Salud y Sangre
+                          </span>
+                          <span className="font-bold text-red-700 flex items-center gap-1 mt-0.5">
+                            <HeartPulse size={13} />
+                            Sangre: {m.tipo_sangre || 'No especificado'} · Alergias:{' '}
+                            {m.alergias || 'Ninguna'}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200">
+                          <span className="block text-[10px] font-black uppercase text-neutral-400">
+                            Contacto Emergencia (ICE)
+                          </span>
+                          <span className="font-bold text-neutral-800 flex items-center gap-1 mt-0.5">
+                            <PhoneCall size={13} className="text-emerald-600" />
+                            {m.contacto_emergencia_nombre || 'N/R'} (
+                            {m.contacto_emergencia_telefono || 'N/R'})
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 border border-neutral-200 sm:col-span-3">
+                          <span className="block text-[10px] font-black uppercase text-neutral-400">
+                            Especialidades y Áreas Declaradas
+                          </span>
+                          <span className="font-bold text-neutral-800 mt-0.5 block">
+                            {especialidadesLista || 'Sin especialidades registradas'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Bloque 1: Asignación de Cargos Operativos Múltiples */}
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                       <div className="mb-3 flex items-center justify-between">
@@ -585,7 +657,7 @@ export default function GestionDirectorio() {
                         </h4>
                         {rolObjetivo === 'postulante' && (
                           <span className="text-[10px] font-black uppercase text-amber-700">
-                            No disponible para Postulantes
+                            Solo para Voluntarios / Directivos
                           </span>
                         )}
                       </div>
@@ -621,14 +693,9 @@ export default function GestionDirectorio() {
                           );
                         })}
                       </div>
-                      <p className="mt-2.5 text-[11px] font-medium text-neutral-500">
-                        * Secretario y Tesorero son cargos únicos (máx. 1 en la
-                        ONG). Puesto de Mando (máx. 5) se asigna dentro de cada
-                        operativo en Central de Mando.
-                      </p>
                     </div>
 
-                    {/* Bloque 2: Visibilidad Pública en Ficha QR (Secretario / DG / SA) */}
+                    {/* Bloque 2: Visibilidad Pública en Ficha QR */}
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                       <div className="mb-3 flex items-center justify-between">
                         <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
@@ -671,13 +738,9 @@ export default function GestionDirectorio() {
                           );
                         })}
                       </div>
-                      <p className="mt-2.5 text-[11px] font-medium text-neutral-500">
-                        Define qué antecedentes verán SENAPRED, Carabineros o
-                        Municipios al escanear la credencial QR.
-                      </p>
                     </div>
 
-                    {/* Bloque 3 (Exclusivo Superadmin): Descarga y Reemplazo de Fotografía Institucional */}
+                    {/* Bloque 3 (Exclusivo Superadmin): Descarga y Reemplazo de Fotografía */}
                     {esSA && (
                       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
                         <h4 className="mb-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">

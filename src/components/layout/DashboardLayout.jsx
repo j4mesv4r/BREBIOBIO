@@ -17,13 +17,14 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 const ETIQUETAS_CARGOS = {
-    secretario: 'Secretario',
-    tesorero: 'Tesorero',
+    secretario: 'Secretario (SEC)',
+    tesorero: 'Tesorero (TES)',
     do: 'Director Operativo (DO)',
     dos: 'Director Op. Suplente (DOs)',
     jc: 'Jefe de Cuadrilla (JC)',
     lem: 'Líder Equipo Médico (LEM)',
-    prehospitalario: 'Prehospitalario',
+    prehospitalario: 'Prehospitalario (PREHOSP)',
+    instructor: 'Instructor (INST)',
 };
 
 export default function DashboardLayout({
@@ -49,19 +50,15 @@ export default function DashboardLayout({
     const esDirectivo = esSA || esDG;
     const esTesorero = cargos.includes('tesorero');
     const esSecretario = cargos.includes('secretario');
+    const esMandoOperativo = cargos.some((c) =>
+        ['do', 'dos', 'jc', 'lem', 'prehospitalario'].includes(c)
+    );
 
     const navItems = [
         {
             label: 'Mi Ficha y Credencial',
             to: '/mi-perfil',
             icon: User,
-            visible: true,
-            accent: 'from-[#F01436] to-[#A3001B]',
-        },
-        {
-            label: 'Central de Mando',
-            to: '/central-mando',
-            icon: MapPin,
             visible: true,
             accent: 'from-[#F01436] to-[#A3001B]',
         },
@@ -82,6 +79,14 @@ export default function DashboardLayout({
                 cargos.includes('do') ||
                 cargos.includes('lem') ||
                 Boolean(permisos.gestion),
+            accent: 'from-[#F01436] to-[#A3001B]',
+        },
+        {
+            label: 'Central de Mando',
+            to: '/central-mando',
+            icon: MapPin,
+            visible:
+                esDirectivo || esMandoOperativo || Boolean(permisos.central_mando),
             accent: 'from-[#F01436] to-[#A3001B]',
         },
         {
@@ -122,6 +127,9 @@ export default function DashboardLayout({
 
     return (
         <div className="flex min-h-screen bg-neutral-100 font-sans text-neutral-950">
+            {/* ===================================================================
+          DESKTOP: Riel lateral 3D que se expande al pasar el cursor (Hover)
+         =================================================================== */}
             <aside
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
@@ -129,10 +137,11 @@ export default function DashboardLayout({
             >
                 <div
                     className={`fixed inset-y-0 left-0 flex flex-col border-r border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out ${hovered
-                            ? 'w-76 shadow-[16px_0_45px_rgba(0,0,0,0.55)]'
-                            : 'w-20 shadow-xl'
+                        ? 'w-76 shadow-[16px_0_45px_rgba(0,0,0,0.55)]'
+                        : 'w-20 shadow-xl'
                         }`}
                 >
+                    {/* Emblema Institucional */}
                     <div className="flex h-20 items-center border-b border-neutral-800 px-4">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white p-1 shadow-[0_6px_15px_rgba(0,0,0,0.5)]">
                             <img
@@ -154,6 +163,7 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
+                    {/* Tarjeta de Identidad del Operador */}
                     <div className="border-b border-neutral-800 p-3.5">
                         <div className="flex items-start rounded-2xl border border-neutral-800 bg-neutral-900/90 p-2 shadow-inner">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-[#FFD25A] to-[#F2B632] text-[#0A0A0A] shadow-md">
@@ -178,6 +188,7 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
+                    {/* Módulos de Navegación con Iconos Gruesos 3D */}
                     <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
                         {navItems.map((item) => {
                             const Icon = item.icon;
@@ -190,15 +201,15 @@ export default function DashboardLayout({
                                     to={item.to}
                                     title={!hovered ? item.label : undefined}
                                     className={`group flex items-center rounded-2xl p-2 transition-all duration-200 ${active
-                                            ? 'bg-neutral-900 ring-1 ring-white/15 shadow-[0_8px_20px_-6px_rgba(217,4,41,0.45)]'
-                                            : 'hover:bg-neutral-900/70'
+                                        ? 'bg-neutral-900 ring-1 ring-white/15 shadow-[0_8px_20px_-6px_rgba(217,4,41,0.45)]'
+                                        : 'hover:bg-neutral-900/70'
                                         }`}
                                 >
                                     <div
                                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${active
-                                                ? `bg-gradient-to-b ${item.accent} ${isAmber ? 'text-[#0A0A0A]' : 'text-white'
-                                                } shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_6px_14px_rgba(0,0,0,0.45)]`
-                                                : 'border border-neutral-800 bg-neutral-900 text-neutral-300 group-hover:border-neutral-700 group-hover:text-white'
+                                            ? `bg-gradient-to-b ${item.accent} ${isAmber ? 'text-[#0A0A0A]' : 'text-white'
+                                            } shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_6px_14px_rgba(0,0,0,0.45)]`
+                                            : 'border border-neutral-800 bg-neutral-900 text-neutral-300 group-hover:border-neutral-700 group-hover:text-white'
                                             }`}
                                     >
                                         <Icon size={20} strokeWidth={2.5} />
@@ -218,6 +229,7 @@ export default function DashboardLayout({
                         })}
                     </nav>
 
+                    {/* Pie del Sidebar: Portal Público y Cerrar Sesión */}
                     <div className="space-y-2 border-t border-neutral-800 p-3">
                         <Link
                             to="/"
@@ -255,6 +267,9 @@ export default function DashboardLayout({
                 </div>
             </aside>
 
+            {/* ===================================================================
+          CONTENEDOR PRINCIPAL + MENÚ DESPLEGABLE CON FLECHA EN MÓVIL
+         =================================================================== */}
             <div className="flex min-w-0 flex-1 flex-col">
                 <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white shadow-sm">
                     <div className="flex items-center justify-between px-4 py-3.5 sm:px-8">
@@ -297,6 +312,7 @@ export default function DashboardLayout({
                         </div>
                     </div>
 
+                    {/* Acordeón Desplegable Móvil */}
                     <div
                         className={`overflow-hidden border-t border-neutral-800 bg-[#0A0A0A] text-white transition-all duration-300 ease-out lg:hidden ${mobileMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
                             }`}
@@ -327,8 +343,8 @@ export default function DashboardLayout({
                                         to={item.to}
                                         onClick={() => setMobileMenuOpen(false)}
                                         className={`flex items-center gap-3 rounded-xl px-3.5 py-3 text-xs font-black uppercase tracking-wider transition-colors ${active
-                                                ? 'bg-[#D90429] text-white'
-                                                : 'bg-neutral-900/70 text-neutral-200 hover:bg-neutral-800'
+                                            ? 'bg-[#D90429] text-white'
+                                            : 'bg-neutral-900/70 text-neutral-200 hover:bg-neutral-800'
                                             }`}
                                     >
                                         <Icon size={19} strokeWidth={2.5} />
