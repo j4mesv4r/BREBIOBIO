@@ -1,163 +1,211 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { Lock, Mail, AlertCircle, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
+  const [errorMsg, setErrorMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
 
-  // Inicio de sesión con Correo y Contraseña
-  const handleEmailLogin = async (e) => {
+  const handleLoginEmail = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setErrorMsg('');
+    setInfoMsg('');
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
-      if (error) throw error;
-
-      // El AuthContext detectará el cambio y redirigiremos al perfil
-      navigate('/mi-perfil');
-
-    } catch (error) {
-      setError('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
-      console.error('Error de login:', error.message);
-    } finally {
+    if (error) {
+      setErrorMsg('Correo o contraseña incorrectos. Verifica tus credenciales.');
       setLoading(false);
+    } else {
+      navigate('/mi-perfil');
     }
   };
 
-  // Inicio de sesión con Google
-  const handleGoogleLogin = async () => {
-    setError(null);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + '/mi-perfil'
-        }
-      });
+  const handleLoginGoogle = async () => {
+    setErrorMsg('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/mi-perfil`,
+      },
+    });
+    if (error) {
+      setErrorMsg(error.message);
+    }
+  };
 
-      if (error) throw error;
-    } catch (error) {
-      setError('Ocurrió un error al intentar conectar con Google.');
-      console.error('Error Google OAuth:', error.message);
+  const handleRecuperarPassword = async () => {
+    setErrorMsg('');
+    setInfoMsg('');
+    if (!email.trim()) {
+      setErrorMsg('Ingresa tu correo electrónico arriba y luego presiona "¿Olvidaste tu contraseña?".');
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/mi-perfil`,
+    });
+
+    if (error) {
+      setErrorMsg(error.message);
+    } else {
+      setInfoMsg('Te enviamos un enlace de recuperación a tu correo electrónico.');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 relative overflow-hidden">
-      {/* Fondo decorativo */}
-      <div className="absolute inset-0 z-0 flex">
-        <div className="w-1/2 h-full bg-black"></div>
-        <div className="w-1/2 h-full bg-gray-50"></div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-4xl flex bg-white rounded-2xl shadow-2xl overflow-hidden min-h-[550px]">
-
-        {/* Columna Izquierda: Marca y Mensaje */}
-        <div className="hidden md:flex flex-col justify-center items-center w-1/2 bg-black text-white p-12 relative border-r-4 border-red-600">
-          <Link to="/" className="absolute top-6 left-6 text-gray-400 hover:text-white flex items-center gap-2 transition-colors text-sm font-semibold">
-            <ArrowLeft size={16} /> Volver al portal
+    <div className="flex min-h-screen flex-col bg-[#0A0A0A] lg:flex-row">
+      {/* Panel Izquierdo Institucional con Logo Oficial */}
+      <div className="relative flex flex-col justify-between border-b-4 border-[#D90429] bg-[#0A0A0A] p-8 text-white lg:w-1/2 lg:border-b-0 lg:border-r-4 lg:p-14">
+        <div>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-xs font-bold text-neutral-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft size={16} />
+            <span>Volver al portal</span>
           </Link>
+        </div>
 
-          <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center font-bold border-4 border-red-600 overflow-hidden mb-8 shadow-[0_0_30px_rgba(220,38,38,0.4)]">
-            <span className="text-black text-2xl font-black leading-tight text-center tracking-widest">BRE<br />ONG</span>
+        <div className="my-auto flex flex-col items-center py-10 text-center">
+          <div className="mb-6 flex h-32 w-32 items-center justify-center rounded-full border-4 border-[#D90429] bg-white p-2 shadow-[0_0_40px_rgba(217,4,41,0.35)]">
+            <img
+              src="/logo-bre.png"
+              alt="Logo O.N.G. BRE Bío-Bío"
+              className="h-full w-full rounded-full object-contain"
+            />
           </div>
 
-          <h2 className="text-3xl font-black italic tracking-widest text-center mb-4">ACCESO RESTRINGIDO</h2>
-          <div className="w-16 h-1 bg-red-600 mb-6"></div>
-          <p className="text-gray-400 text-center text-sm font-medium px-4">
-            Plataforma exclusiva para miembros activos, directiva y postulantes de BRE Biobío.
+          <h1 className="text-3xl font-black italic tracking-wider text-white sm:text-4xl">
+            ACCESO
+            <br />
+            RESTRINGIDO
+          </h1>
+          <div className="my-4 h-1 w-12 rounded-full bg-[#D90429]" />
+          <p className="max-w-xs text-xs font-medium leading-relaxed text-neutral-300 sm:text-sm">
+            Plataforma exclusiva para miembros activos, directiva y postulantes de
+            O.N.G. BRE Bío-Bío.
           </p>
         </div>
 
-        {/* Columna Derecha: Formulario de Login */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center relative bg-white">
+        <div className="text-center text-[11px] font-bold uppercase tracking-widest text-neutral-500">
+          Servir · Apoyar · Preparar · Salvar Vidas
+        </div>
+      </div>
 
-          <Link to="/" className="md:hidden absolute top-6 left-6 text-gray-500 hover:text-black flex items-center gap-2 transition-colors text-sm font-semibold">
-            <ArrowLeft size={16} /> Volver
-          </Link>
+      {/* Panel Derecho: Formulario de Inicio de Sesión */}
+      <div className="flex flex-1 items-center justify-center bg-neutral-100 p-6 sm:p-12">
+        <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-8 shadow-xl sm:p-10">
+          <h2 className="text-2xl font-black text-neutral-950">
+            Iniciar Sesión
+          </h2>
+          <p className="mt-1 text-xs font-medium text-neutral-500">
+            Ingresa a tu cuenta institucional o de postulante.
+          </p>
 
-          <div className="mb-8 mt-8 md:mt-0">
-            <h3 className="text-2xl font-black text-gray-900 mb-2">Iniciar Sesión</h3>
-            <p className="text-gray-500 text-sm font-medium">Ingresa a tu cuenta institucional.</p>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm font-semibold flex items-center gap-3 border border-red-200 mb-6">
-              <AlertCircle size={20} className="shrink-0" />
-              {error}
+          {errorMsg && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border-l-4 border-[#D90429] bg-red-50 p-3 text-xs font-bold text-red-900">
+              <AlertCircle size={16} className="shrink-0 text-[#D90429]" />
+              <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* Botón de Google */}
+          {infoMsg && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border-l-4 border-emerald-600 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+              <span>{infoMsg}</span>
+            </div>
+          )}
+
           <button
-            onClick={handleGoogleLogin}
             type="button"
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all mb-6"
+            onClick={handleLoginGoogle}
+            className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-3 text-xs font-black text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            <svg className="h-4 w-4" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+              />
             </svg>
-            Continuar con Google
+            <span>Continuar con Google</span>
           </button>
 
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500 font-medium">O ingresa con tu correo</span>
-            </div>
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-neutral-200" />
+            <span className="text-[11px] font-bold text-neutral-400">
+              O ingresa con tu correo
+            </span>
+            <div className="h-px flex-1 bg-neutral-200" />
           </div>
 
-          <form onSubmit={handleEmailLogin} className="space-y-5">
+          <form onSubmit={handleLoginEmail} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Correo Electrónico</label>
+              <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-neutral-700">
+                Correo Electrónico
+              </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
-                </div>
+                <Mail
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400"
+                />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600 focus:border-transparent outline-none transition-all font-medium text-gray-900"
-                  placeholder="ejemplo@correo.com"
+                  placeholder="ejemplo@brebiobio.cl"
+                  className="w-full rounded-xl border border-neutral-300 py-3 pl-10 pr-4 text-sm font-semibold text-neutral-900 outline-none focus:border-[#D90429]"
                 />
               </div>
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Contraseña</label>
-                <a href="#" className="text-xs font-semibold text-red-600 hover:text-red-800 transition-colors">¿Olvidaste tu contraseña?</a>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-[11px] font-black uppercase tracking-wider text-neutral-700">
+                  Contraseña
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRecuperarPassword}
+                  className="text-[11px] font-bold text-[#D90429] hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
               </div>
-
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
+                <Lock
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400"
+                />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600 focus:border-transparent outline-none transition-all font-medium text-gray-900"
                   placeholder="••••••••"
+                  className="w-full rounded-xl border border-neutral-300 py-3 pl-10 pr-4 text-sm font-semibold text-neutral-900 outline-none focus:border-[#D90429]"
                 />
               </div>
             </div>
@@ -165,19 +213,23 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex justify-center py-4 px-4 border border-transparent rounded-lg shadow-sm text-base font-bold text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 transition-all disabled:opacity-70 mt-2"
+              className="mt-2 w-full rounded-xl bg-[#D90429] py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-lg transition-colors hover:bg-red-700 disabled:opacity-50"
             >
-              {loading ? 'Ingresando...' : 'Acceder al Panel'}
+              {loading ? 'Verificando acceso...' : 'Acceder al Panel'}
             </button>
           </form>
 
-          <div className="mt-8 text-center text-sm font-medium text-gray-600 border-t border-gray-100 pt-6">
-            ¿No tienes cuenta y deseas unirte a BRE Biobío?{' '}
-            <Link to="/registro" className="text-red-600 hover:text-red-800 font-bold transition-colors">
+          <div className="mt-6 border-t border-neutral-100 pt-5 text-center">
+            <p className="text-xs font-medium text-neutral-600">
+              ¿No tienes cuenta y deseas unirte a BRE Bío-Bío?
+            </p>
+            <Link
+              to="/postular"
+              className="mt-1 inline-block text-xs font-black uppercase tracking-wider text-[#D90429] hover:underline"
+            >
               Postula aquí
             </Link>
           </div>
-
         </div>
       </div>
     </div>
