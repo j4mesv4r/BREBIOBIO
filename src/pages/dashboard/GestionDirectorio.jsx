@@ -10,6 +10,8 @@ import {
   Eye,
   Award,
   BadgeCheck,
+  Camera,
+  Download,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -86,6 +88,7 @@ export default function GestionDirectorio() {
   const [loading, setLoading] = useState(true);
   const [alerta, setAlerta] = useState('');
   const [panelAbiertoId, setPanelAbiertoId] = useState(null);
+  const [subiendoFotoId, setSubiendoFotoId] = useState(null);
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -163,7 +166,6 @@ export default function GestionDirectorio() {
       }
     }
 
-    // Si pasa a 'postulante', limpiar cargos operativos automáticamente
     const payload = { rol: nuevoRol };
     if (nuevoRol === 'postulante') {
       payload.cargos_operativos = [];
@@ -282,6 +284,44 @@ export default function GestionDirectorio() {
     }
   };
 
+  // Exclusivo Superadmin: Subir o reemplazar fotografía institucional / uniformada
+  const handleAdminSubirFotoMiembro = async (miembroId, file) => {
+    if (!esSA || !file) return;
+    setAlerta('');
+    setSubiendoFotoId(miembroId);
+
+    try {
+      const ext = file.name.split('.').pop();
+      const filePath = `${miembroId}/uniformada_${Date.now()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('avatares')
+        .upload(filePath, file, { upsert: true });
+
+      if (upErr) throw upErr;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('avatares').getPublicUrl(filePath);
+
+      const { error: dbErr } = await supabase
+        .from('perfiles')
+        .update({
+          foto_url: publicUrl,
+          usando_avatar_generico: false,
+        })
+        .eq('id', miembroId);
+
+      if (dbErr) throw dbErr;
+
+      cargarDatos();
+    } catch (err) {
+      setAlerta(err.message || 'No se pudo actualizar la fotografía del miembro.');
+    } finally {
+      setSubiendoFotoId(null);
+    }
+  };
+
   const actualizarSolicitud = async (id, estado) => {
     const { error } = await supabase
       .from('solicitudes_apoyo')
@@ -370,6 +410,9 @@ export default function GestionDirectorio() {
             const cargosMiembro = Array.isArray(m.cargos_operativos)
               ? m.cargos_operativos
               : [];
+            const especialidadesLista = Array.isArray(m.especialidades) && m.especialidades.length > 0
+              ? m.especialidades.join(' · ')
+              : m.especialidad || '';
             const visPublica = m.visibilidad_publica || {
               foto_url: true,
               rut: true,
@@ -417,6 +460,12 @@ export default function GestionDirectorio() {
                         {m.estado_validacion || 'pendiente'}
                       </span>
 
+                      {m.usando_avatar_generico && (
+                        <span className="rounded-lg bg-amber-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-amber-900">
+                          Avatar Genérico (Prórroga {m.prorrogas_avatar_usadas || 0}/2)
+                        </span>
+                      )}
+
                       {m.es_menor_autorizado && (
                         <span className="rounded-lg bg-[#F2B632] px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
                           Menor Autorizado (16-17)
@@ -427,7 +476,7 @@ export default function GestionDirectorio() {
                     <p className="text-xs font-semibold text-neutral-600">
                       RUT: {m.rut || 'No registrado'} · Tel:{' '}
                       {m.telefono || 'Sin teléfono'}
-                      {m.especialidad ? ` · Área: ${m.especialidad}` : ''}
+                      {especialidadesLista ? ` · Especialidades: ${especialidadesLista}` : ''}
                     </p>
 
                     {/* Badges de Cargos Activos del Voluntario */}
@@ -460,7 +509,6 @@ export default function GestionDirectorio() {
                       </span>
                     ) : (
                       <>
-                        {/* Selector estricto de los 4 roles */}
                         <select
                           aria-label="Rol del sistema"
                           value={rolObjetivo}
@@ -516,12 +564,12 @@ export default function GestionDirectorio() {
                       }
                       className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
                     >
-                      {expandido ? 'Ocultar Cargos / QR' : 'Cargos y Visibilidad'}
+                      {expandido ? 'Ocultar Cargos / Foto' : 'Cargos y Visibilidad'}
                     </button>
                   </div>
                 </div>
 
-                {/* Panel Desplegable: Cargos Operativos Múltiples + Visibilidad Pública */}
+                {/* Panel Desplegable: Cargos Operativos Múltiples + Visibilidad Pública + Foto Superadmin */}
                 {expandido && (
                   <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
                     {/* Bloque 1: Asignación de Cargos Operativos Múltiples */}
@@ -628,6 +676,65 @@ export default function GestionDirectorio() {
                         Municipios al escanear la credencial QR.
                       </p>
                     </div>
+
+                    {/* Bloque 3 (Exclusivo Superadmin): Descarga y Reemplazo de Fotografía Institucional */}
+                    {esSA && (
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
+                        <h4 className="mb-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                          Gestión de Fotografía Institucional (Exclusivo Superadmin)
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <div className="h-20 w-16 shrink-0 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white">
+                            {m.foto_url ? (
+                              <img
+                                src={m.foto_url}
+                                alt={m.nombre_completo}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-full items-center justify-center text-center text-[10px] font-black uppercase text-neutral-400">
+                                Sin Foto
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            {m.foto_url && (
+                              <a
+                                href={m.foto_url}
+                                download={`Foto_${m.rut || m.id}.png`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
+                              >
+                                <Download size={14} strokeWidth={2.5} /> Descargar Foto Original
+                              </a>
+                            )}
+
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800">
+                              <Camera size={14} strokeWidth={2.5} />
+                              <span>
+                                {subiendoFotoId === m.id
+                                  ? 'Subiendo imagen...'
+                                  : 'Subir / Reemplazar Foto con Uniforme'}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                disabled={subiendoFotoId === m.id}
+                                onChange={(e) =>
+                                  handleAdminSubirFotoMiembro(
+                                    m.id,
+                                    e.target.files?.[0]
+                                  )
+                                }
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
