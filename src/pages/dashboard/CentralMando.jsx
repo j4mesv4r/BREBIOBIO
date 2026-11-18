@@ -14,7 +14,6 @@ import {
   Shield,
   Users,
   HeartPulse,
-  PhoneCall,
   Trash2,
   Eye,
   Navigation,
@@ -36,7 +35,6 @@ import {
   ChevronUp,
   ChevronDown,
   RotateCcw,
-  Compass,
 } from 'lucide-react';
 
 const TRIAGE_ESTILOS = {
@@ -107,7 +105,7 @@ export default function CentralMando() {
   const [efectivos, setEfectivos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Mapa Leaflet y capas
+  // Mapa Leaflet Principal
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
@@ -115,7 +113,15 @@ export default function CentralMando() {
   const watchIdRef = useRef(null);
   const lastSentTimestampRef = useRef(0);
 
-  // Buscador de direcciones
+  // Mini-Mapa dentro del Modal de Crear Operativo
+  const modalMapContainerRef = useRef(null);
+  const modalMapInstanceRef = useRef(null);
+  const modalMarkerRef = useRef(null);
+  const [busquedaModal, setBusquedaModal] = useState('');
+  const [resultadosModal, setResultadosModal] = useState([]);
+  const [buscandoModal, setBuscandoModal] = useState(false);
+
+  // Buscador de direcciones en Mapa Principal
   const [busquedaMapa, setBusquedaMapa] = useState('');
   const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
   const [buscandoDir, setBuscandoDir] = useState(false);
@@ -148,8 +154,8 @@ export default function CentralMando() {
     descripcion: '',
     tipo_operativo: 'real',
     estado: 'en_curso',
-    latitud: '-36.8201',
-    longitud: '-73.0498',
+    latitud: '-36.82010',
+    longitud: '-73.04980',
   });
   const [pmInicialIds, setPmInicialIds] = useState([]);
 
@@ -236,10 +242,7 @@ export default function CentralMando() {
   const puedeCrearCuadrilla = esPmDeEsteCaso || esJC;
   const puedeRegistrarTriage = esSA || esDG || esDO || esLEM || esPrehosp;
 
-  // Ordenamiento inteligente de casos:
-  // 1. Activos (< 4 días) más recientes arriba
-  // 2. Activos antiguos (> 4 días) después
-  // 3. Finalizados al final (siempre reabribles)
+  // Ordenamiento inteligente de casos
   const operativosOrdenados = useMemo(() => {
     const cuatroDiasMs = 4 * 24 * 60 * 60 * 1000;
     const ahora = Date.now();
@@ -391,7 +394,125 @@ export default function CentralMando() {
     }
   };
 
-  // Inicializar Mapa Leaflet con curvas de nivel topográficas (OpenTopoMap + OSM)
+  // ============================================================================
+  // MINI-MAPA INTERACTIVO DENTRO DEL MODAL "CREAR OPERATIVO O SIMULACRO"
+  // ============================================================================
+  useEffect(() => {
+    if (!showModalCrear) {
+      if (modalMapInstanceRef.current) {
+        modalMapInstanceRef.current.remove();
+        modalMapInstanceRef.current = null;
+        modalMarkerRef.current = null;
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!modalMapContainerRef.current || modalMapInstanceRef.current) return;
+
+      const latIni = parseFloat(nuevoOp.latitud) || -36.8201;
+      const lngIni = parseFloat(nuevoOp.longitud) || -73.0498;
+
+      const mMap = L.map(modalMapContainerRef.current).setView(
+        [latIni, lngIni],
+        11
+      );
+
+      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenTopoMap',
+        maxZoom: 17,
+      }).addTo(mMap);
+
+      const iconoPunto = L.divIcon({
+        className: 'bre-modal-pin',
+        html: `<div style="width:24px;height:24px;border-radius:9999px;background:#D90429;border:3px solid #FFFFFF;box-shadow:0 3px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;">
+          <div style="width:8px;height:8px;border-radius:9999px;background:#F2B632;"></div>
+        </div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([latIni, lngIni], {
+        draggable: true,
+        icon: iconoPunto,
+      }).addTo(mMap);
+
+      marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        setNuevoOp((prev) => ({
+          ...prev,
+          latitud: pos.lat.toFixed(5),
+          longitud: pos.lng.toFixed(5),
+        }));
+      });
+
+      mMap.on('click', (e) => {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        marker.setLatLng([lat, lng]);
+        setNuevoOp((prev) => ({
+          ...prev,
+          latitud: lat.toFixed(5),
+          longitud: lng.toFixed(5),
+        }));
+      });
+
+      modalMapInstanceRef.current = mMap;
+      modalMarkerRef.current = marker;
+      mMap.invalidateSize();
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [showModalCrear]);
+
+  // Sincronizar marcador del modal si el usuario edita manualmente los inputs de Latitud/Longitud
+  useEffect(() => {
+    if (!showModalCrear || !modalMapInstanceRef.current || !modalMarkerRef.current)
+      return;
+    const lat = parseFloat(nuevoOp.latitud);
+    const lng = parseFloat(nuevoOp.longitud);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      modalMarkerRef.current.setLatLng([lat, lng]);
+      modalMapInstanceRef.current.panTo([lat, lng]);
+    }
+  }, [nuevoOp.latitud, nuevoOp.longitud, showModalCrear]);
+
+  const handleBuscarDireccionModal = async (e) => {
+    e.preventDefault();
+    const q = busquedaModal.trim();
+    if (!q) return;
+
+    const matchCoords = q.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+    if (matchCoords) {
+      const lat = parseFloat(matchCoords[1]).toFixed(5);
+      const lng = parseFloat(matchCoords[2]).toFixed(5);
+      setNuevoOp((prev) => ({ ...prev, latitud: lat, longitud: lng }));
+      if (modalMapInstanceRef.current) {
+        modalMapInstanceRef.current.setView([parseFloat(lat), parseFloat(lng)], 14);
+      }
+      setResultadosModal([]);
+      return;
+    }
+
+    setBuscandoModal(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&countrycodes=cl&limit=5&q=${encodeURIComponent(
+          q
+        )}`
+      );
+      const data = await res.json();
+      setResultadosModal(Array.isArray(data) ? data : []);
+    } catch {
+      setResultadosModal([]);
+    } finally {
+      setBuscandoModal(false);
+    }
+  };
+
+  // ============================================================================
+  // INICIALIZAR MAPA PRINCIPAL CON CURVAS DE NIVEL TOPOGRÁFICAS
+  // ============================================================================
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -434,32 +555,21 @@ export default function CentralMando() {
     };
   }, []);
 
-  // Reajustar tamaño de mapa al abrir o cerrar el panel lateral
   useEffect(() => {
     if (mapInstanceRef.current) {
       setTimeout(() => mapInstanceRef.current.invalidateSize(), 260);
     }
   }, [selectedOp]);
 
-  // Interacción directa con el mapa (Pinchar punto / Dibujar línea o polígono / Crear caso)
+  // Interacción directa con el mapa principal (Pinchar punto / Dibujar línea o polígono)
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
     const handleMapClick = (e) => {
+      if (!selectedOp) return;
       const lat = Number(e.latlng.lat.toFixed(6));
       const lng = Number(e.latlng.lng.toFixed(6));
-
-      if (showModalCrear) {
-        setNuevoOp((prev) => ({
-          ...prev,
-          latitud: lat.toFixed(5),
-          longitud: lng.toFixed(5),
-        }));
-        return;
-      }
-
-      if (!selectedOp) return;
 
       if (modoMapa === 'pinchar_wp') {
         setCoordenadasPinchadas({ lat, lng });
@@ -474,9 +584,9 @@ export default function CentralMando() {
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [showModalCrear, selectedOp, modoMapa]);
+  }, [selectedOp, modoMapa]);
 
-  // Dibujar previsualización de trazos en curso sobre drawLayerRef
+  // Previsualización de trazos en curso sobre drawLayerRef
   useEffect(() => {
     const layer = drawLayerRef.current;
     if (!layer) return;
@@ -529,7 +639,6 @@ export default function CentralMando() {
     if (!layer) return;
     layer.clearLayers();
 
-    // 1. Todas las salas tácticas que NO se han cerrado
     const iconoEmergencia = L.divIcon({
       className: 'bre-marker-caso',
       html: `<div style="width:28px;height:28px;border-radius:9999px;background:#D90429;border:3px solid #FFFFFF;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;">
@@ -554,7 +663,6 @@ export default function CentralMando() {
       });
 
     if (selectedOp) {
-      // 2. Waypoints del caso
       waypoints.forEach((wp) => {
         const info =
           TIPOS_WAYPOINT.find((t) => t.key === wp.tipo) || TIPOS_WAYPOINT[0];
@@ -575,7 +683,6 @@ export default function CentralMando() {
         m.addTo(layer);
       });
 
-      // 3. Polígonos y Líneas (Drone, Acuático, K9, KML/GPX importados)
       geometrias.forEach((geo) => {
         const coords = Array.isArray(geo.coordenadas) ? geo.coordenadas : [];
         if (coords.length === 0) return;
@@ -608,7 +715,6 @@ export default function CentralMando() {
         }
       });
 
-      // 4. Trazas GPS + Marcadores en tiempo real de Voluntarios y Externos
       const rutasPorUsuario = {};
       trackingPuntos.forEach((pt) => {
         const key = pt.perfil_id ? `int_${pt.perfil_id}` : `ext_${pt.invitado_id}`;
@@ -686,7 +792,7 @@ export default function CentralMando() {
     }
   }, [operativos, selectedOp, waypoints, geometrias, trackingPuntos, efectivos, invitadosExt]);
 
-  // Suscripción Realtime a ubicaciones GPS, waypoints, geometrías y chat del caso abierto
+  // Suscripción Realtime
   useEffect(() => {
     fetchDatosBase();
 
@@ -869,15 +975,11 @@ export default function CentralMando() {
     cargarDetalleOperativo(op);
   };
 
-  // ============================================================================
-  // BUSCADOR DE DIRECCIONES Y COORDENADAS (OPENSTREETMAP NOMINATIM)
-  // ============================================================================
   const handleBuscarDireccion = async (e) => {
     e.preventDefault();
     const q = busquedaMapa.trim();
     if (!q) return;
 
-    // Detectar si pegaron coordenadas directas "-36.82, -73.04"
     const matchCoords = q.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
     if (matchCoords && mapInstanceRef.current) {
       const lat = parseFloat(matchCoords[1]);
@@ -904,9 +1006,6 @@ export default function CentralMando() {
     }
   };
 
-  // ============================================================================
-  // GUARDAR POLÍGONOS / LÍNEAS / METADATOS DRONE Y ACUÁTICO
-  // ============================================================================
   const handleGuardarGeometria = async (e) => {
     e.preventDefault();
     if (!selectedOp || puntosDibujo.length < 2) return;
@@ -951,9 +1050,6 @@ export default function CentralMando() {
     }
   };
 
-  // ============================================================================
-  // IMPORTAR KML / KMZ / GPX (GEO TRACKER / GOOGLE EARTH)
-  // ============================================================================
   const handleImportarArchivoGeo = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !selectedOp) return;
@@ -982,7 +1078,6 @@ export default function CentralMando() {
       const nuevasGeos = [];
       const nuevosWps = [];
 
-      // 1. Parsear GPX (Geo Tracker)
       if (nombreLower.endsWith('.gpx')) {
         const wpts = Array.from(xmlDoc.getElementsByTagName('wpt'));
         wpts.forEach((w) => {
@@ -1029,7 +1124,6 @@ export default function CentralMando() {
           }
         });
       } else {
-        // 2. Parsear KML / KMZ (Google Earth / Geo Tracker)
         const placemarks = Array.from(xmlDoc.getElementsByTagName('Placemark'));
         placemarks.forEach((pm, idx) => {
           const nombre =
@@ -1131,9 +1225,6 @@ export default function CentralMando() {
     }
   };
 
-  // ============================================================================
-  // EXPORTAR TODO EL OPERATIVO A .KML (LISTO PARA GOOGLE EARTH)
-  // ============================================================================
   const exportarOperativoKML = () => {
     if (!selectedOp) return;
 
@@ -1188,9 +1279,6 @@ export default function CentralMando() {
     URL.revokeObjectURL(url);
   };
 
-  // ============================================================================
-  // TRAKEO GPS EN TIEMPO REAL (6s ONLINE / MÁX. 20s OFFLINE)
-  // ============================================================================
   const toggleTracking = () => {
     if (!selectedOp) return;
 
@@ -1291,13 +1379,15 @@ export default function CentralMando() {
 
     if (!error) {
       setShowModalCrear(false);
+      setBusquedaModal('');
+      setResultadosModal([]);
       setNuevoOp({
         titulo: '',
         descripcion: '',
         tipo_operativo: 'real',
         estado: 'en_curso',
-        latitud: '-36.8201',
-        longitud: '-73.0498',
+        latitud: '-36.82010',
+        longitud: '-73.04980',
       });
       setPmInicialIds([]);
       fetchDatosBase();
@@ -1730,12 +1820,9 @@ export default function CentralMando() {
       }
     >
       <div className="relative flex h-[calc(100vh-73px)] flex-col lg:flex-row">
-        {/* ========================================================================
-            PANEL IZQUIERDO: LISTA DE CASOS O SALA TÁCTICA LATERAL (SIN TAPAR MAPA)
-           ======================================================================== */}
+        {/* PANEL IZQUIERDO: LISTA DE CASOS O SALA TÁCTICA LATERAL */}
         <div className="z-20 flex h-[48%] w-full flex-col border-b border-neutral-200 bg-white lg:h-full lg:w-[440px] lg:shrink-0 lg:border-b-0 lg:border-r">
           {!selectedOp ? (
-            /* VISTA A: LISTADO ORDENADO DE OPERATIVOS */
             <>
               <div className="border-b border-neutral-100 bg-neutral-50 px-5 py-3.5">
                 <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-800">
@@ -1816,9 +1903,7 @@ export default function CentralMando() {
               </div>
             </>
           ) : (
-            /* VISTA B: SALA TÁCTICA DEL CASO SELECCIONADO (PANEL LATERAL EN PC / DESPLEGABLE EN MÓVIL) */
             <div className="flex h-full flex-col">
-              {/* Header compacto del caso */}
               <div className="bg-[#0A0A0A] px-4 py-3 text-white">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -1866,7 +1951,6 @@ export default function CentralMando() {
                   </div>
                 </div>
 
-                {/* Control de estado (Reabrir si estaba finalizado) */}
                 {esPmDeEsteCaso && (
                   <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
                     <span className="text-[10px] font-bold uppercase text-neutral-400">
@@ -1932,7 +2016,6 @@ export default function CentralMando() {
                 </div>
               )}
 
-              {/* Contenido Scrolleable del Panel Lateral */}
               <div className="flex-1 overflow-y-auto p-3.5 text-xs">
                 {loadingDetalle ? (
                   <p className="py-8 text-center font-bold text-neutral-500">
@@ -2211,10 +2294,8 @@ export default function CentralMando() {
                     </div>
                   </div>
                 ) : tabTactico === 'geometrias' ? (
-                  /* PESTAÑA POLÍGONOS / DRONE / ACUÁTICO / IMPORTAR Y EXPORTAR KML-KMZ-GPX */
                   <div className="space-y-4">
-                    {/* Importar KML / KMZ / GPX y Exportar KML Google Earth */}
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+                    <div className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                       <h4 className="font-black uppercase text-neutral-900">
                         Intercambio GPS (Geo Tracker · Google Earth)
                       </h4>
@@ -2245,9 +2326,8 @@ export default function CentralMando() {
                       </div>
                     </div>
 
-                    {/* Dibujo Manual de Polígonos / Líneas con Metadatos Drone o Acuático */}
                     {estoyAutorizadoEnCaso && (
-                      <div className="rounded-xl border border-neutral-200 bg-white p-3 space-y-2.5">
+                      <div className="space-y-2.5 rounded-xl border border-neutral-200 bg-white p-3">
                         <h4 className="font-black uppercase text-neutral-900">
                           Trazar Sector / Polígono en Mapa
                         </h4>
@@ -2364,7 +2444,6 @@ export default function CentralMando() {
                       </div>
                     )}
 
-                    {/* Listado de Polígonos y Trazos guardados */}
                     <div className="space-y-2">
                       {geometrias.map((g) => (
                         <div
@@ -2711,7 +2790,6 @@ export default function CentralMando() {
                     })}
                   </div>
                 ) : (
-                  /* TRIAGE */
                   <div className="space-y-3">
                     {puedeRegistrarTriage && (
                       <form
@@ -2863,11 +2941,8 @@ export default function CentralMando() {
           )}
         </div>
 
-        {/* ========================================================================
-            PANEL DERECHO: MAPA TOPOGRÁFICO SIEMPRE VISIBLE + BUSCADOR DE DIRECCIONES
-           ======================================================================== */}
+        {/* PANEL DERECHO: MAPA TOPOGRÁFICO SIEMPRE VISIBLE */}
         <div className="relative z-10 h-[52%] w-full bg-neutral-200 lg:h-full lg:flex-1">
-          {/* Buscador Flotante de Direcciones / Coordenadas */}
           <div className="absolute left-12 right-3 top-3 z-[450] max-w-md">
             <form
               onSubmit={handleBuscarDireccion}
@@ -2913,7 +2988,6 @@ export default function CentralMando() {
             )}
           </div>
 
-          {/* Leyenda Táctica Flotante */}
           <div className="absolute bottom-4 left-3 z-[450] hidden rounded-xl border border-neutral-300 bg-white/95 px-3 py-2 text-[10px] font-black shadow-lg sm:flex sm:items-center sm:gap-3">
             <span className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-full bg-[#D90429]" /> DO / Caso
@@ -2925,7 +2999,7 @@ export default function CentralMando() {
               <span className="h-2.5 w-2.5 rounded-full bg-[#059669]" /> Méd / Track
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#FACC15] border border-black" /> Externo QR
+              <span className="h-2.5 w-2.5 rounded-full border border-black bg-[#FACC15]" /> Externo QR
             </span>
           </div>
 
@@ -2933,10 +3007,12 @@ export default function CentralMando() {
         </div>
       </div>
 
-      {/* MODAL CREAR OPERATIVO */}
+      {/* ========================================================================
+          MODAL CREAR OPERATIVO CON BUSCADOR Y MINI-MAPA PROPORCIONAL INTERACTIVO
+         ======================================================================== */}
       {showModalCrear && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
-          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-neutral-100 pb-3">
               <h3 className="text-lg font-black uppercase text-neutral-950">
                 Crear Operativo o Simulacro
@@ -3017,35 +3093,112 @@ export default function CentralMando() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                    Latitud
+              {/* UBICACIÓN GEOREFERENCIADA: BUSCADOR + MINI-MAPA PROPORCIONAL + COORDENADAS */}
+              <div className="space-y-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-black uppercase text-neutral-900">
+                    <MapPin size={15} className="text-[#D90429]" />
+                    Punto Base del Operativo (Busca, pincha en el mapa o ingresa coordenadas)
                   </label>
-                  <input
-                    type="text"
-                    value={nuevoOp.latitud}
-                    onChange={(e) =>
-                      setNuevoOp({ ...nuevoOp, latitud: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
-                  />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                    Longitud
-                  </label>
-                  <input
-                    type="text"
-                    value={nuevoOp.longitud}
-                    onChange={(e) =>
-                      setNuevoOp({ ...nuevoOp, longitud: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+
+                {/* Buscador dentro del modal */}
+                <div className="relative">
+                  <div className="flex overflow-hidden rounded-xl border border-neutral-300 bg-white">
+                    <input
+                      type="text"
+                      value={busquedaModal}
+                      onChange={(e) => setBusquedaModal(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleBuscarDireccionModal(e);
+                      }}
+                      placeholder="Buscar sector, calle, cerro, río o pegar lat, lng..."
+                      className="flex-1 px-3 py-2 text-xs font-semibold outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBuscarDireccionModal}
+                      disabled={buscandoModal}
+                      className="bg-[#0A0A0A] px-3.5 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
+                    >
+                      {buscandoModal ? '...' : 'Buscar'}
+                    </button>
+                  </div>
+
+                  {resultadosModal.length > 0 && (
+                    <div className="absolute z-[1000] mt-1 w-full overflow-hidden rounded-xl border border-neutral-300 bg-white shadow-xl">
+                      {resultadosModal.map((r) => (
+                        <button
+                          key={r.place_id}
+                          type="button"
+                          onClick={() => {
+                            const lat = parseFloat(r.lat).toFixed(5);
+                            const lng = parseFloat(r.lon).toFixed(5);
+                            setNuevoOp((prev) => ({
+                              ...prev,
+                              latitud: lat,
+                              longitud: lng,
+                            }));
+                            if (modalMapInstanceRef.current) {
+                              modalMapInstanceRef.current.setView(
+                                [parseFloat(lat), parseFloat(lng)],
+                                15
+                              );
+                            }
+                            setResultadosModal([]);
+                          }}
+                          className="block w-full border-b border-neutral-100 px-3 py-2 text-left text-[11px] font-semibold text-neutral-800 hover:bg-neutral-100"
+                        >
+                          {r.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mini-mapa proporcional al ancho del recuadro */}
+                <div className="relative h-60 w-full overflow-hidden rounded-xl border-2 border-[#0A0A0A] shadow-inner">
+                  <div
+                    ref={modalMapContainerRef}
+                    className="h-full w-full"
                   />
+                  <span className="pointer-events-none absolute bottom-2 left-2 z-[500] rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-[#F2B632]">
+                    Haz clic en el mapa o arrastra el marcador
+                  </span>
+                </div>
+
+                {/* Campos numéricos sincronizados */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-black uppercase text-neutral-600">
+                      Latitud
+                    </label>
+                    <input
+                      type="text"
+                      value={nuevoOp.latitud}
+                      onChange={(e) =>
+                        setNuevoOp({ ...nuevoOp, latitud: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 font-mono text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-black uppercase text-neutral-600">
+                      Longitud
+                    </label>
+                    <input
+                      type="text"
+                      value={nuevoOp.longitud}
+                      onChange={(e) =>
+                        setNuevoOp({ ...nuevoOp, longitud: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 font-mono text-xs font-bold"
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* Puesto de Mando */}
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-xs font-black uppercase text-neutral-900">
