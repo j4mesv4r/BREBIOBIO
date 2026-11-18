@@ -1,297 +1,207 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   ShieldCheck,
-  FileText,
-  AlertCircle,
-  Droplets,
-  AlertTriangle,
-  Calendar,
   BadgeCheck,
-  Compass,
+  AlertTriangle,
+  FileText,
+  User,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export default function FichaVoluntarioPublica() {
-  const { rut: identificador } = useParams();
-  const [voluntario, setVoluntario] = useState(null);
+  const { rut } = useParams(); // Recibe el código BRE-XXXXXX o RUT
+  const [perfil, setPerfil] = useState(null);
   const [certificados, setCertificados] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const cargarFicha = async () => {
+    const buscarVoluntario = async () => {
       setLoading(true);
+      const paramLimpio = decodeURIComponent(rut || '').trim();
 
-      let query = supabase
+      const { data, error } = await supabase
         .from('perfiles')
-        .select(
-          'id, rut, nombre_completo, rol, estado_validacion, codigo_credencial, foto_url, funcion, tipo_sangre, alergias, fecha_emision_credencial, fecha_vigencia_credencial, activo, created_at'
+        .select('*')
+        .or(
+          `codigo_credencial.ilike.${paramLimpio},rut.ilike.${paramLimpio}`
         )
-        .eq('activo', true);
+        .maybeSingle();
 
-      if (UUID_REGEX.test(identificador || '')) {
-        query = query.eq('id', identificador);
-      } else {
-        query = query.or(
-          `rut.eq.${identificador},codigo_credencial.eq.${identificador}`
-        );
+      if (!error && data) {
+        setPerfil(data);
+
+        const { data: certs } = await supabase
+          .from('certificados')
+          .select('*')
+          .eq('perfil_id', data.id)
+          .eq('estado_validacion', 'aprobado');
+
+        if (certs) setCertificados(certs);
       }
-
-      const { data: perfil, error: perfilError } = await query.maybeSingle();
-
-      if (perfilError || !perfil) {
-        setVoluntario(null);
-        setCertificados([]);
-        setLoading(false);
-        return;
-      }
-
-      setVoluntario(perfil);
-
-      const { data: certs } = await supabase
-        .from('certificados')
-        .select('id, titulo_curso, institucion, fecha_emision, archivo_url')
-        .eq('perfil_id', perfil.id)
-        .eq('estado_validacion', 'aprobado')
-        .order('fecha_emision', { ascending: false });
-
-      setCertificados(certs || []);
       setLoading(false);
     };
 
-    if (identificador) cargarFicha();
-  }, [identificador]);
+    buscarVoluntario();
+  }, [rut]);
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-sm font-extrabold uppercase tracking-wider text-[#17191D]">
-        Verificando credencial oficial en terreno...
+      <div className="flex min-h-[60vh] items-center justify-center text-xs font-black uppercase tracking-widest text-neutral-600">
+        Verificando credencial institucional...
       </div>
     );
   }
 
-  if (!voluntario) {
+  if (!perfil || perfil.estado_validacion !== 'aprobado') {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 font-sans">
-        <div className="rounded-lg border-2 border-[#17191D] bg-white p-8 text-center shadow-[6px_6px_0px_0px_#17191D]">
-          <AlertCircle size={48} className="mx-auto mb-4 text-[#C8202F]" />
-          <h1 className="text-2xl font-black uppercase text-[#17191D]">
-            Credencial no encontrada o inactiva
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <div className="rounded-2xl border-2 border-[#D90429] bg-white p-8 text-center shadow-lg">
+          <AlertTriangle size={48} className="mx-auto mb-3 text-[#D90429]" />
+          <h1 className="text-lg font-black uppercase text-neutral-950">
+            Credencial No Vigente o No Encontrada
           </h1>
-          <p className="mt-2 text-sm font-semibold text-neutral-700">
-            El identificador{' '}
-            <strong className="text-[#17191D]">{identificador}</strong> no
-            corresponde a un voluntario activo en ONG BRE BÍO-BÍO.
+          <p className="mt-2 text-xs text-neutral-600">
+            El código consultado no corresponde a un miembro activo autorizado
+            de la O.N.G. BRE Bío-Bío.
           </p>
+          <Link
+            to="/"
+            className="mt-6 inline-block rounded-xl bg-[#0A0A0A] px-5 py-2.5 text-xs font-black uppercase text-[#F2B632]"
+          >
+            Volver al Portal Institucional
+          </Link>
         </div>
       </div>
     );
   }
 
-  const idInstitucional =
-    voluntario.codigo_credencial ||
-    `BRE-${voluntario.id.slice(0, 4).toUpperCase()}`;
-
-  const fechaEmision = voluntario.fecha_emision_credencial
-    ? new Date(voluntario.fecha_emision_credencial).toLocaleDateString('es-CL')
-    : new Date(voluntario.created_at).toLocaleDateString('es-CL');
-
-  const fechaVigencia = voluntario.fecha_vigencia_credencial
-    ? new Date(voluntario.fecha_vigencia_credencial).toLocaleDateString('es-CL')
-    : 'Vigente · Anual';
-
-  const esActivo =
-    voluntario.activo && voluntario.estado_validacion === 'aprobado';
+  const vis = perfil.visibilidad_publica || {
+    foto_url: true,
+    rut: true,
+    especialidad: true,
+    tipo_sangre: true,
+    certificados: true,
+    vigencia: true,
+    telefono: false,
+  };
 
   return (
-    <div className="min-h-[80vh] bg-[#F3F4F6] px-4 py-10 font-sans">
-      <div className="mx-auto max-w-4xl space-y-8">
-        {/* Credencial Oficial de Alta Seguridad */}
-        <div className="overflow-hidden rounded-xl border-2 border-[#17191D] bg-white shadow-[8px_8px_0px_0px_#17191D]">
-          {/* Cabecera Institucional con geometría roja y grafito */}
-          <div className="relative overflow-hidden border-b-4 border-[#F2B632] bg-[#17191D] px-6 py-5 text-white">
-            <div className="absolute -right-8 -top-8 h-36 w-52 -skew-x-12 bg-[#C8202F]" />
-            <div className="relative z-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-white p-0.5">
-                  <img
-                    src="/logo-bre.png"
-                    alt="Emblema oficial ONG BRE BÍO-BÍO"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-lg font-black uppercase tracking-wider sm:text-xl">
-                    ONG BRE BÍO-BÍO
-                  </h1>
-                  <p className="text-xs font-extrabold uppercase tracking-widest text-[#F2B632]">
-                    Búsqueda · Rescate · Emergencia
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-start rounded border-2 border-white bg-[#17191D] px-3.5 py-1.5 sm:self-center">
-                <BadgeCheck
-                  size={18}
-                  className={esActivo ? 'text-[#F2B632]' : 'text-neutral-400'}
-                />
-                <span className="text-xs font-black uppercase tracking-wider text-white">
-                  {esActivo ? 'VOLUNTARIO ACTIVO' : 'EN VALIDACIÓN'}
-                </span>
-              </div>
-            </div>
+    <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="overflow-hidden rounded-2xl border-2 border-[#0A0A0A] bg-white shadow-xl">
+        {/* Cabecera Oficial de Fiscalización */}
+        <div className="bg-[#0A0A0A] px-6 py-5 text-white">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 rounded bg-[#F2B632] px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
+              <ShieldCheck size={13} /> Verificación Oficial · Ley N° 20.500
+            </span>
+            <span className="font-mono text-xs font-black text-[#F2B632]">
+              {perfil.codigo_credencial}
+            </span>
           </div>
+          <h1 className="mt-2 text-xl font-black uppercase">
+            O.N.G. BRE Bío-Bío · Ficha de Acreditación
+          </h1>
+        </div>
 
-          {/* Cuerpo de la Credencial */}
-          <div className="grid grid-cols-1 gap-8 p-6 md:grid-cols-12 md:p-8">
-            {/* Fotografía + ID Institucional */}
-            <div className="flex flex-col items-center md:col-span-4">
-              <div className="h-44 w-36 overflow-hidden rounded-lg border-4 border-[#17191D] bg-[#F3F4F6] shadow-md">
-                {voluntario.foto_url ? (
+        <div className="space-y-6 p-6">
+          <div className="flex flex-col items-center gap-5 sm:flex-row">
+            {vis.foto_url && (
+              <div className="h-32 w-28 shrink-0 overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-neutral-100">
+                {perfil.foto_url ? (
                   <img
-                    src={voluntario.foto_url}
-                    alt={voluntario.nombre_completo || 'Voluntario BRE'}
+                    src={perfil.foto_url}
+                    alt={perfil.nombre_completo}
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-[#17191D] text-4xl font-black text-white">
-                    {voluntario.nombre_completo?.charAt(0) || 'B'}
-                  </div>
+                  <User size={40} className="m-auto mt-8 text-neutral-400" />
                 )}
               </div>
+            )}
 
-              <div className="mt-4 w-full max-w-[180px] rounded border-2 border-[#17191D] bg-[#17191D] px-3 py-2 text-center">
-                <p className="text-[10px] font-extrabold uppercase tracking-widest text-[#F2B632]">
-                  ID Institucional
-                </p>
-                <p className="text-base font-black tracking-wider text-white">
-                  {idInstitucional}
-                </p>
-              </div>
-            </div>
-
-            {/* Datos Oficiales de Identificación y Emergencia */}
-            <div className="space-y-5 md:col-span-8">
-              <div className="border-b-2 border-neutral-200 pb-4">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-[#C8202F]">
-                  Personal Acreditado en Terreno
-                </p>
-                <h2 className="mt-1 text-2xl font-black uppercase tracking-tight text-[#17191D] sm:text-3xl">
-                  {voluntario.nombre_completo || 'Voluntario BRE'}
-                </h2>
-                <p className="mt-1 flex items-center gap-2 text-sm font-extrabold text-neutral-700">
-                  <Compass size={16} className="text-[#C8202F]" />
-                  <span>
-                    {voluntario.funcion ||
-                      `Función: ${voluntario.rol?.toUpperCase() || 'RESCATISTA'}`}
+            <div className="space-y-1.5 text-center sm:text-left">
+              <h2 className="text-2xl font-black text-neutral-950">
+                {perfil.nombre_completo}
+              </h2>
+              <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
+                <span className="rounded-lg bg-[#D90429] px-3 py-1 text-xs font-black uppercase text-white">
+                  {perfil.rol}
+                </span>
+                {vis.vigencia && (
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1 text-xs font-black uppercase text-emerald-800">
+                    <BadgeCheck size={14} /> Acreditación Vigente
                   </span>
-                </p>
-              </div>
-
-              {/* Grilla de Datos de Verificación */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="rounded border-2 border-neutral-200 bg-[#F3F4F6] p-3.5">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-neutral-500">
-                    RUT
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-[#17191D]">
-                    {voluntario.rut || 'No registrado'}
-                  </p>
-                </div>
-
-                <div className="rounded border-2 border-neutral-200 bg-[#F3F4F6] p-3.5">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-neutral-500">
-                    Rol / Rango
-                  </p>
-                  <p className="mt-0.5 text-base font-black uppercase text-[#17191D]">
-                    {voluntario.rol || 'Voluntario'}
-                  </p>
-                </div>
-
-                <div className="rounded border-2 border-[#C8202F] bg-red-50 p-3.5">
-                  <p className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#C8202F]">
-                    <Droplets size={13} /> Tipo de Sangre
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-[#17191D]">
-                    {voluntario.tipo_sangre || 'Sin informar'}
-                  </p>
-                </div>
-
-                <div className="rounded border-2 border-[#F2B632] bg-amber-50 p-3.5">
-                  <p className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#17191D]">
-                    <AlertTriangle size={13} className="text-[#C8202F]" />{' '}
-                    Alergias
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-[#17191D]">
-                    {voluntario.alergias || 'Ninguna conocida'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Fechas de Emisión y Vigencia */}
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded border-2 border-[#17191D] bg-[#17191D] px-4 py-3 text-white">
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  <Calendar size={15} className="text-[#F2B632]" />
-                  <span>Emisión: {fechaEmision}</span>
-                </div>
-                <div className="text-xs font-black uppercase tracking-wider text-[#F2B632]">
-                  Vigencia: {fechaVigencia}
-                </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Especialidades y Certificaciones Aprobadas */}
-        <div className="rounded-xl border-2 border-[#17191D] bg-white p-6 shadow-[6px_6px_0px_0px_#17191D] md:p-8">
-          <h3 className="mb-5 flex items-center gap-2 text-lg font-black uppercase text-[#17191D]">
-            <ShieldCheck className="text-[#C8202F]" size={22} />
-            Especialidades y Certificaciones Aprobadas
-          </h3>
+          <div className="grid grid-cols-1 gap-3 border-t border-neutral-100 pt-4 text-xs sm:grid-cols-2">
+            {vis.rut && (
+              <div className="rounded-xl bg-neutral-50 p-3">
+                <span className="block font-black uppercase text-neutral-400">
+                  RUT
+                </span>
+                <strong className="text-sm text-neutral-900">
+                  {perfil.rut}
+                </strong>
+              </div>
+            )}
 
-          {certificados.length === 0 ? (
-            <p className="rounded border-2 border-dashed border-neutral-300 bg-[#F3F4F6] p-6 text-center text-sm font-semibold text-neutral-600">
-              Este voluntario no registra especialidades aprobadas en el
-              sistema aún.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {certificados.map((cert) => (
-                <div
-                  key={cert.id}
-                  className="flex flex-col justify-between gap-3 rounded border-2 border-neutral-200 p-4 transition-colors hover:border-[#17191D]"
-                >
-                  <div>
-                    <h4 className="font-black uppercase text-[#17191D]">
-                      {cert.titulo_curso}
-                    </h4>
-                    <p className="text-xs font-bold text-neutral-600">
-                      {cert.institucion || 'Institución acreditadora'}
-                    </p>
-                    {cert.fecha_emision && (
-                      <p className="mt-1 text-xs font-semibold text-neutral-500">
-                        Emitido:{' '}
-                        {new Date(cert.fecha_emision).toLocaleDateString(
-                          'es-CL'
-                        )}
-                      </p>
-                    )}
+            {vis.especialidad && (
+              <div className="rounded-xl bg-neutral-50 p-3">
+                <span className="block font-black uppercase text-neutral-400">
+                  Especialidad Operativa
+                </span>
+                <strong className="text-sm text-neutral-900">
+                  {perfil.especialidad || 'Rescate y Emergencias'}
+                </strong>
+              </div>
+            )}
+
+            {vis.tipo_sangre && (
+              <div className="rounded-xl bg-red-50 p-3">
+                <span className="block font-black uppercase text-red-400">
+                  Grupo Sanguíneo
+                </span>
+                <strong className="text-sm text-[#D90429]">
+                  {perfil.tipo_sangre || 'No informado'}
+                </strong>
+              </div>
+            )}
+
+            {vis.telefono && (
+              <div className="rounded-xl bg-neutral-50 p-3">
+                <span className="block font-black uppercase text-neutral-400">
+                  Teléfono Institucional
+                </span>
+                <strong className="text-sm text-neutral-900">
+                  {perfil.telefono || 'No público'}
+                </strong>
+              </div>
+            )}
+          </div>
+
+          {vis.certificados && certificados.length > 0 && (
+            <div className="border-t border-neutral-100 pt-4">
+              <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-black uppercase text-neutral-800">
+                <FileText size={15} className="text-[#D90429]" /> Capacitaciones
+                Validadas por Directorio
+              </h3>
+              <div className="space-y-2">
+                {certificados.map((c) => (
+                  <div
+                    key={c.id}
+                    className="rounded-xl border border-neutral-200 px-3.5 py-2 text-xs"
+                  >
+                    <strong className="text-neutral-900">
+                      {c.titulo_curso}
+                    </strong>{' '}
+                    <span className="text-neutral-500">({c.institucion})</span>
                   </div>
-                  {cert.archivo_url && (
-                    <a
-                      href={cert.archivo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex w-fit items-center gap-1.5 rounded bg-[#17191D] px-3 py-1.5 text-xs font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-[#C8202F]"
-                    >
-                      <FileText size={13} /> Ver Certificado
-                    </a>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
