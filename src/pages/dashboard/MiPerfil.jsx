@@ -19,7 +19,6 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { REGIONES_CHILE } from '../../data/chileRegionesComunas';
 
-// Catálogo Estándar Internacional (INSARAG / FEMA / NFPA) + Nacional (SENAPRED) + Administrativo
 const ESPECIALIDADES_CATALOGO = [
     { nombre: 'Búsqueda y Rescate Agreste (GSAR)', abrev: 'GSAR' },
     { nombre: 'Rescate Urbano (USAR / INSARAG)', abrev: 'USAR' },
@@ -43,7 +42,6 @@ const ESPECIALIDADES_CATALOGO = [
     { nombre: 'Apoyo Psicosocial en Emergencias', abrev: 'PSICOSOC' },
 ];
 
-// Formateador y Validador Matemático Módulo 11 de RUT Chileno
 function formatearRutChileno(valor) {
     const limpio = (valor || '').replace(/[^0-9kK]/g, '').toUpperCase();
     if (limpio.length <= 1) return limpio;
@@ -58,7 +56,6 @@ function validarRutChileno(rutFormateado) {
     if (limpio.length < 8) return false;
     const cuerpo = limpio.slice(0, -1);
     const dvIngresado = limpio.slice(-1);
-
     if (!/^\d+$/.test(cuerpo)) return false;
 
     let suma = 0;
@@ -69,31 +66,8 @@ function validarRutChileno(rutFormateado) {
     }
 
     const resto = 11 - (suma % 11);
-    const dvEsperado =
-        resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
-
+    const dvEsperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
     return dvIngresado === dvEsperado;
-}
-
-function abreviarEspecialidadesParaCredencial(lista) {
-    if (!Array.isArray(lista) || lista.length === 0) return 'BÚSQUEDA Y RESCATE';
-    const textoCompleto = lista.join(' · ').toUpperCase();
-    if (lista.length <= 2 && textoCompleto.length <= 42) {
-        return textoCompleto;
-    }
-    return lista
-        .map((esp) => {
-            const encontrada = ESPECIALIDADES_CATALOGO.find(
-                (s) => s.nombre.toLowerCase() === esp.toLowerCase()
-            );
-            if (encontrada) return encontrada.abrev;
-            return esp
-                .split(' ')
-                .map((p) => (p.length > 5 ? p.slice(0, 4) + '.' : p))
-                .join(' ')
-                .toUpperCase();
-        })
-        .join(' · ');
 }
 
 function obtenerAvatarGenericoUrl(genero) {
@@ -116,13 +90,94 @@ const RESPALDO_AVATAR_SVG = (genero) =>
     </svg>`
     )}`;
 
+// Título principal en franja roja: Superadmin sin cargo directivo/DO -> Voluntario / Voluntaria
+function resolverTituloFranjaCredencial(perfil, generoActual) {
+    const r = (perfil?.rol || 'voluntario').toLowerCase();
+    const cargos = Array.isArray(perfil?.cargos_operativos)
+        ? perfil.cargos_operativos.map((c) => c.toLowerCase())
+        : [];
+    const esMujer = (perfil?.genero || generoActual) === 'femenino';
+
+    if (cargos.includes('do')) return 'DIRECTOR OPERATIVO';
+    if (r === 'director') return 'DIRECTORIO';
+    if (r === 'superadmin') {
+        return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
+    }
+    if (r === 'voluntario') {
+        return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
+    }
+    return r.toUpperCase();
+}
+
+// Función / Área específica en la organización (por defecto: BÚSQUEDA Y RESCATE)
+function resolverFuncionAreaCredencial(perfil) {
+    const cargos = Array.isArray(perfil?.cargos_operativos)
+        ? perfil.cargos_operativos.map((c) => c.toLowerCase())
+        : [];
+
+    const etiquetasCargo = {
+        tesorero: 'TESORERO',
+        secretario: 'SECRETARÍA',
+        do: 'DIRECCIÓN OPERATIVA',
+        dos: 'DIRECCIÓN OPERATIVA',
+        jc: 'JEFE DE CUADRILLA',
+        lem: 'PREHOSPITALARIO',
+        prehospitalario: 'PREHOSPITALARIO',
+        instructor: 'INSTRUCCIÓN',
+        operativo: 'OPERATIVO',
+    };
+
+    const cargosMapeados = cargos
+        .map((c) => etiquetasCargo[c])
+        .filter(Boolean);
+
+    if (cargosMapeados.length > 0) {
+        return Array.from(new Set(cargosMapeados)).join(' · ');
+    }
+
+    const funcionTexto = (perfil?.funcion || perfil?.cargo_ong || '').trim();
+    if (
+        funcionTexto &&
+        !['superadmin', 'postulante', 'usuario'].includes(funcionTexto.toLowerCase())
+    ) {
+        return funcionTexto.toUpperCase();
+    }
+
+    return 'BÚSQUEDA Y RESCATE';
+}
+
+// Divide texto en líneas ajustadas al ancho máximo en canvas
+function envolverTextoEnLineas(ctx, texto, maxWidth, maxLineas = 3) {
+    const palabras = (texto || '').trim().split(/\s+/).filter(Boolean);
+    if (palabras.length === 0) return [''];
+
+    const lineas = [];
+    let lineaActual = palabras[0];
+
+    for (let i = 1; i < palabras.length; i++) {
+        const prueba = `${lineaActual} ${palabras[i]}`;
+        if (ctx.measureText(prueba).width <= maxWidth) {
+            lineaActual = prueba;
+        } else {
+            lineas.push(lineaActual);
+            lineaActual = palabras[i];
+            if (lineas.length === maxLineas - 1) break;
+        }
+    }
+
+    if (lineas.length < maxLineas) {
+        lineas.push(lineaActual);
+    }
+
+    return lineas.slice(0, maxLineas);
+}
+
 export default function MiPerfil() {
     const { user, profile, refreshProfile } = useAuth();
     const [saving, setSaving] = useState(false);
     const [uploadingFoto, setUploadingFoto] = useState(false);
     const [status, setStatus] = useState({ type: '', message: '' });
 
-    // Formulario ficha / onboarding
     const [form, setForm] = useState({
         nombre_completo: '',
         rut: '',
@@ -140,11 +195,9 @@ export default function MiPerfil() {
         usando_avatar_generico: false,
     });
 
-    // Chips/Tags + Autocomplete
     const [inputEsp, setInputEsp] = useState('');
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
-    // Certificados
     const [certificados, setCertificados] = useState([]);
     const [nuevoCert, setNuevoCert] = useState({
         titulo_curso: '',
@@ -153,7 +206,6 @@ export default function MiPerfil() {
     const [archivoCert, setArchivoCert] = useState(null);
     const [subiendoCert, setSubiendoCert] = useState(false);
 
-    // Canvases Credencial Doble Cara Horizontal (1012 x 638)
     const canvasFrenteRef = useRef(null);
     const canvasReversoRef = useRef(null);
     const [ladoCredencial, setLadoCredencial] = useState('frente');
@@ -215,9 +267,6 @@ export default function MiPerfil() {
         if (!error && data) setCertificados(data);
     };
 
-    // ============================================================================
-    // PRÓRROGAS DE AVATAR GENÉRICO (7 + 15 + 15 DÍAS)
-    // ============================================================================
     const calcularEstadoAvatar = () => {
         if (form.foto_url && !form.usando_avatar_generico) {
             return {
@@ -278,14 +327,11 @@ export default function MiPerfil() {
                 message:
                     actuales + 1 === 1
                         ? 'Primera prórroga de 15 días activada.'
-                        : 'Última prórroga de 15 días activada. Al vencer deberás subir tu fotografía obligatoriamente.',
+                        : 'Última prórroga de 15 días activada.',
             });
         }
     };
 
-    // ============================================================================
-    // CHIPS / TAGS + AUTOCOMPLETE ESPECIALIDADES
-    // ============================================================================
     const agregarEspecialidadChip = (valorRaw) => {
         const limpio = valorRaw.replace(/,/g, '').trim();
         if (!limpio) return;
@@ -334,9 +380,6 @@ export default function MiPerfil() {
             )
     );
 
-    // ============================================================================
-    // SUBIDA DE FOTO OFICIAL O AVATAR GENÉRICO POR GÉNERO
-    // ============================================================================
     const handleSubirFoto = async (e) => {
         const file = e.target.files?.[0];
         if (!file || !user?.id) return;
@@ -512,7 +555,7 @@ export default function MiPerfil() {
     };
 
     // ============================================================================
-    // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL (1012 x 638) SOBRE TUS PLANTILLAS
+    // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL (1012 x 638)
     // ============================================================================
     useEffect(() => {
         if (!aprobado) return;
@@ -547,21 +590,14 @@ export default function MiPerfil() {
             cFrente.height = H;
 
             const imgBaseFrente =
-                (await cargarImagen('/credencial-frente.png')) ||
-                (await cargarImagen('/credencial-frente.jpg'));
+                (await cargarImagen('/credencial-frente.jpg')) ||
+                (await cargarImagen('/credencial-frente.png'));
 
             if (imgBaseFrente) {
                 ctxF.drawImage(imgBaseFrente, 0, 0, W, H);
-            } else {
-                ctxF.fillStyle = '#F3F4F6';
-                ctxF.fillRect(0, 0, W, H);
-                ctxF.fillStyle = '#B91C1C';
-                ctxF.fillRect(340, 195, W - 340, 82);
-                ctxF.fillStyle = '#111827';
-                ctxF.fillRect(0, 515, W, 123);
             }
 
-            // Fotografía del Voluntario o Avatar Uniformado en recuadro izquierdo
+            // Fotografía del Voluntario cubriendo íntegramente el área dispuesta (X: 35, Y: 72, W: 300, H: 400)[cite: 13, 14]
             const avatarGenPng =
                 form.genero === 'femenino'
                     ? '/avatar-femenino.png'
@@ -577,37 +613,60 @@ export default function MiPerfil() {
                 (await cargarImagen(avatarGenJpg, RESPALDO_AVATAR_SVG(form.genero)));
 
             if (imgFoto) {
+                const boxX = 35;
+                const boxY = 72;
+                const boxW = 300;
+                const boxH = 400;
+
                 ctxF.save();
                 ctxF.beginPath();
-                ctxF.roundRect(35, 72, 300, 400, 18);
+                ctxF.roundRect(boxX, boxY, boxW, boxH, 16);
                 ctxF.clip();
-                ctxF.drawImage(imgFoto, 35, 72, 300, 400);
+
+                // Escala proporcional para llenar el área sin dejar bordes vacíos[cite: 13, 14]
+                const ratioImg = imgFoto.width / imgFoto.height;
+                const ratioBox = boxW / boxH;
+                let drawW = boxW;
+                let drawH = boxH;
+                let drawX = boxX;
+                let drawY = boxY;
+
+                if (ratioImg > ratioBox) {
+                    drawH = boxH;
+                    drawW = boxH * ratioImg;
+                    drawX = boxX - (drawW - boxW) / 2;
+                } else {
+                    drawW = boxW;
+                    drawH = boxW / ratioImg;
+                    drawY = boxY - (drawH - boxH) / 2;
+                }
+
+                ctxF.drawImage(imgFoto, drawX, drawY, drawW, drawH);
                 ctxF.restore();
             }
 
-            // Franja Roja: Rol o Cargo Principal
-            const cargosLista = Array.isArray(profile?.cargos_operativos)
-                ? profile.cargos_operativos
-                : [];
-            const tituloFranjaRoja = cargosLista.includes('do')
-                ? 'DIRECTOR OPERATIVO'
-                : rol === 'director'
-                    ? 'DIRECTOR GENERAL'
-                    : rol.toUpperCase();
-
+            // Franja Roja: VOLUNTARIO / VOLUNTARIA si es superadmin sin cargo directivo/DO[cite: 13]
+            const tituloFranjaRoja = resolverTituloFranjaCredencial(
+                profile,
+                form.genero
+            );
             ctxF.fillStyle = '#FFFFFF';
             ctxF.textAlign = 'left';
             ctxF.font = '900 42px sans-serif';
-            ctxF.fillText(tituloFranjaRoja, 412, 250, 440);
+            ctxF.fillText(tituloFranjaRoja, 412, 248, 430);
 
             // Nombre Completo
             ctxF.fillStyle = '#111827';
             ctxF.font = '900 28px sans-serif';
             ctxF.fillText(
-                (form.nombre_completo || profile?.nombre_completo || 'NOMBRE COMPLETO').toUpperCase(),
+                (
+                    form.nombre_completo ||
+                    profile?.nombre_completo ||
+                    'NOMBRE COMPLETO'
+                ).toUpperCase(),
                 420,
                 345,
-                550
+                545
             );
 
             // RUT Formateado
@@ -618,12 +677,10 @@ export default function MiPerfil() {
                 418
             );
 
-            // Función / Área
-            const espResumen = abreviarEspecialidadesParaCredencial(
-                form.especialidades
-            );
-            ctxF.font = '900 23px sans-serif';
-            ctxF.fillText(espResumen, 420, 488, 550);
+            // Función / Área debajo de la etiqueta "FUNCIÓN / ÁREA"[cite: 13]
+            const funcionAreaTexto = resolverFuncionAreaCredencial(profile);
+            ctxF.font = '900 22px sans-serif';
+            ctxF.fillText(funcionAreaTexto, 420, 502, 545);
 
             // Barra Inferior Negra: ID Institucional + Emisión + Vigencia
             const codigoMostrar =
@@ -658,18 +715,11 @@ export default function MiPerfil() {
             cReverso.height = H;
 
             const imgBaseReverso =
-                (await cargarImagen('/credencial-reverso.png')) ||
-                (await cargarImagen('/credencial-reverso.jpg'));
+                (await cargarImagen('/credencial-reverso.jpg')) ||
+                (await cargarImagen('/credencial-reverso.png'));
 
             if (imgBaseReverso) {
                 ctxR.drawImage(imgBaseReverso, 0, 0, W, H);
-            } else {
-                ctxR.fillStyle = '#F3F4F6';
-                ctxR.fillRect(0, 0, W, H);
-                ctxR.fillStyle = '#B91C1C';
-                ctxR.fillRect(720, 0, 292, 515);
-                ctxR.fillStyle = '#111827';
-                ctxR.fillRect(0, 515, W, 123);
             }
 
             // Grupo Sanguíneo (Arriba a la derecha bajo "GRUPO SANGUINEO")
@@ -680,38 +730,77 @@ export default function MiPerfil() {
                 form.tipo_sangre && form.tipo_sangre !== 'No especificado'
                     ? form.tipo_sangre
                     : 'N/E';
-            ctxR.fillText(gsTexto, 868, 145);
+            ctxR.fillText(gsTexto, 875, 132);
 
-            // Caja Gris 1: Especialidad
-            ctxR.fillStyle = '#111827';
-            ctxR.textAlign = 'left';
-            ctxR.font = '800 20px sans-serif';
+            // Caja Gris 1: Especialidad (hasta 2 líneas dentro del recuadro gris)[cite: 12]
             const textoEspReverso =
                 form.especialidades.length > 0
-                    ? abreviarEspecialidadesParaCredencial(form.especialidades)
+                    ? form.especialidades.join(' · ').toUpperCase()
                     : 'BÚSQUEDA Y RESCATE EN EMERGENCIAS';
-            ctxR.fillText(textoEspReverso, 158, 296, 440);
 
-            // Caja Gris 2: Antecedentes Médicos - Alergias
-            ctxR.font = '800 19px sans-serif';
+            ctxR.fillStyle = '#111827';
+            ctxR.textAlign = 'left';
+            ctxR.font = '800 18px sans-serif';
+            const lineasEsp = envolverTextoEnLineas(
+                ctxR,
+                textoEspReverso,
+                450,
+                2
+            );
+            lineasEsp.forEach((linea, idx) => {
+                ctxR.fillText(linea, 152, 286 + idx * 24, 450);
+            });
+
+            // Caja Gris 2: Antecedentes Médicos - Alergias (auto-ajuste hasta 3 líneas dentro del recuadro gris)[cite: 12]
             const textoAlergias = (
                 form.alergias || 'SIN ANTECEDENTES RELEVANTES'
             ).toUpperCase();
-            ctxR.fillText(textoAlergias, 158, 434, 440);
 
-            // Código QR dentro del recuadro blanco con borde rojo
+            let fontSizeAlergias = 18;
+            ctxR.font = `800 ${fontSizeAlergias}px sans-serif`;
+            let lineasAlergias = envolverTextoEnLineas(
+                ctxR,
+                textoAlergias,
+                445,
+                3
+            );
+
+            if (textoAlergias.length > 95) {
+                fontSizeAlergias = 15;
+                ctxR.font = `800 ${fontSizeAlergias}px sans-serif`;
+                lineasAlergias = envolverTextoEnLineas(ctxR, textoAlergias, 445, 3);
+            }
+
+            const altoLineaAlergias = fontSizeAlergias + 5;
+            const inicioYAlergias =
+                lineasAlergias.length === 1 ? 430 : lineasAlergias.length === 2 ? 418 : 408;
+
+            lineasAlergias.forEach((linea, idx) => {
+                ctxR.fillText(
+                    linea,
+                    152,
+                    inicioYAlergias + idx * altoLineaAlergias,
+                    445
+                );
+            });
+
+            // Código QR centrado dentro del recuadro blanco con borde rojo[cite: 12]
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
                 codigoMostrar
             )}`;
             const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
-                width: 265,
+                width: 240,
                 margin: 1,
                 color: { dark: '#0A0A0A', light: '#FFFFFF' },
             });
 
             const imgQr = await cargarImagen(qrDataUrl);
             if (imgQr) {
-                ctxR.drawImage(imgQr, 710, 198, 264, 264);
+                // Recuadro blanco interior del marco rojo: X ~ 710..966, Y ~ 196..452
+                const qrSize = 236;
+                const qrX = 710 + (256 - qrSize) / 2;
+                const qrY = 196 + (256 - qrSize) / 2;
+                ctxR.drawImage(imgQr, qrX, qrY, qrSize, qrSize);
             }
 
             setCredencialLista(true);
@@ -735,9 +824,6 @@ export default function MiPerfil() {
         enlace.click();
     };
 
-    // ============================================================================
-    // SELECTOR ESPECIALIDADES CHIPS + AUTOCOMPLETE
-    // ============================================================================
     const renderSelectorEspecialidades = () => (
         <div className="relative sm:col-span-2">
             <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
@@ -798,9 +884,6 @@ export default function MiPerfil() {
         </div>
     );
 
-    // ============================================================================
-    // ALERTAS PERSISTENTES: FOTOGRAFÍA Y GRUPO SANGUÍNEO
-    // ============================================================================
     const renderBannersRecordatorio = () => (
         <div className="mb-6 space-y-3">
             {faltaGrupoSanguineo && (
@@ -871,9 +954,6 @@ export default function MiPerfil() {
         </div>
     );
 
-    // ============================================================================
-    // VISTA 1: ONBOARDING OBLIGATORIO DE PRIMER INGRESO
-    // ============================================================================
     if (!onboardingListo) {
         return (
             <DashboardLayout
@@ -1159,9 +1239,6 @@ export default function MiPerfil() {
         );
     }
 
-    // ============================================================================
-    // VISTA 2: SALA DE ESPERA INSTITUCIONAL
-    // ============================================================================
     if (!aprobado) {
         return (
             <DashboardLayout
@@ -1192,9 +1269,6 @@ export default function MiPerfil() {
         );
     }
 
-    // ============================================================================
-    // VISTA 3: PERFIL COMPLETO + CREDENCIAL DOBLE CARA + CERTIFICADOS
-    // ============================================================================
     return (
         <DashboardLayout
             title="Mi Ficha y Credencial"
@@ -1221,7 +1295,6 @@ export default function MiPerfil() {
                 </div>
             )}
 
-            {/* SECCIÓN SUPERIOR: CREDENCIAL HORIZONTAL DOBLE CARA */}
             <div className="mb-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
@@ -1292,7 +1365,6 @@ export default function MiPerfil() {
                 </div>
             </div>
 
-            {/* SECCIÓN INFERIOR: FICHA PERSONAL + CERTIFICADOS */}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                 <form
                     onSubmit={handleGuardarFicha}
@@ -1555,7 +1627,6 @@ export default function MiPerfil() {
                     </div>
                 </form>
 
-                {/* Certificados */}
                 <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
                     <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
                         <FileText size={17} className="text-[#D90429]" /> Mis Certificados
