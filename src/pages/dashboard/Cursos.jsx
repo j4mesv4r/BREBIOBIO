@@ -12,9 +12,57 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
+const PLATAFORMAS_GRATUITAS = [
+    {
+        id: 'plat-senapred',
+        titulo: 'Formación Oficial SINAPRED · Academia SENAPRED',
+        descripcion:
+            'Cursos gratuitos certificados del Servicio Nacional de Prevención y Respuesta ante Desastres de Chile. Descarga tu diploma y súbelo en Mi Ficha y Credencial para validarlo.',
+        entidad: 'SENAPRED / SINAPRED',
+        tipo: 'externo',
+        url_recurso: 'https://academia.senapred.cl/',
+        obligatorio: true,
+        esPlataformaBase: true,
+    },
+    {
+        id: 'plat-fema',
+        titulo: 'Sistema de Comando de Incidentes (ICS / SCI) · FEMA EMI',
+        descripcion:
+            'Cursos gratuitos en línea de autoaprendizaje sobre estructura de comando, operaciones, logística y coordinación en emergencias.',
+        entidad: 'FEMA EMI (Gratuito)',
+        tipo: 'externo',
+        url_recurso: 'https://training.fema.gov/is/',
+        obligatorio: true,
+        esPlataformaBase: true,
+    },
+    {
+        id: 'plat-ifrc',
+        titulo: 'Primeros Auxilios y Respuesta Comunitaria · IFRC / Cruz Roja',
+        descripcion:
+            'Módulos gratuitos sobre respuesta ante emergencias, preparación comunitaria y trabajo voluntario en terreno.',
+        entidad: 'IFRC / Cruz Roja (Gratuito)',
+        tipo: 'externo',
+        url_recurso: 'https://ifrc.csod.com',
+        obligatorio: false,
+        esPlataformaBase: true,
+    },
+    {
+        id: 'plat-ops',
+        titulo: 'Manejo de Emergencias y Trauma · Campus Virtual OPS / OMS',
+        descripcion:
+            'Capacitaciones gratuitas en atención prehospitalaria, triage y respuesta sanitaria ante desastres.',
+        entidad: 'OPS / OMS (Gratuito)',
+        tipo: 'externo',
+        url_recurso: 'https://www.campusvirtualsp.org',
+        obligatorio: false,
+        esPlataformaBase: true,
+    },
+];
+
 export default function Cursos() {
     const { profile } = useAuth();
     const [cursos, setCursos] = useState([]);
+    const [filtroCaracter, setFiltroCaracter] = useState('todos');
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -22,14 +70,14 @@ export default function Cursos() {
     const [nuevoCurso, setNuevoCurso] = useState({
         titulo: '',
         descripcion: '',
-        entidad: 'SENAPRED / SINAPRED',
-        tipo: 'externo',
+        entidad: 'BRE Bío-Bío',
+        tipo: 'interno',
         url_recurso: '',
-        obligatorio: false,
+        obligatorio: true,
     });
 
     const rol = (profile?.rol || '').toLowerCase();
-    const puedePublicar = rol === 'superadmin' || rol === 'director';
+    const esSuperadmin = rol === 'superadmin';
 
     const cargarCursos = async () => {
         setLoading(true);
@@ -51,16 +99,17 @@ export default function Cursos() {
 
     const handleCrear = async (e) => {
         e.preventDefault();
+        if (!esSuperadmin) return;
         setSaving(true);
 
         const { error } = await supabase.from('cursos_capacitacion').insert([
             {
                 titulo: nuevoCurso.titulo.trim(),
                 descripcion: nuevoCurso.descripcion.trim(),
-                entidad: nuevoCurso.entidad.trim(),
+                entidad: nuevoCurso.entidad.trim() || 'BRE Bío-Bío',
                 tipo: nuevoCurso.tipo,
-                url_recurso: nuevoCurso.url_recurso.trim(),
-                obligatorio: nuevoCurso.obligatorio,
+                url_recurso: nuevoCurso.url_recurso.trim() || null,
+                obligatorio: Boolean(nuevoCurso.obligatorio),
                 creado_por: profile?.id || null,
             },
         ]);
@@ -72,16 +121,17 @@ export default function Cursos() {
             setNuevoCurso({
                 titulo: '',
                 descripcion: '',
-                entidad: 'SENAPRED / SINAPRED',
-                tipo: 'externo',
+                entidad: 'BRE Bío-Bío',
+                tipo: 'interno',
                 url_recurso: '',
-                obligatorio: false,
+                obligatorio: true,
             });
             cargarCursos();
         }
     };
 
     const handleEliminar = async (id) => {
+        if (!esSuperadmin) return;
         if (!window.confirm('¿Eliminar este curso o recurso formativo?')) return;
         const { error } = await supabase
             .from('cursos_capacitacion')
@@ -91,35 +141,45 @@ export default function Cursos() {
         if (!error) cargarCursos();
     };
 
+    const catalogoCombinado = [
+        ...cursos.map((c) => ({ ...c, esPlataformaBase: false })),
+        ...PLATAFORMAS_GRATUITAS,
+    ].filter((c) => {
+        if (filtroCaracter === 'obligatorio') return Boolean(c.obligatorio);
+        if (filtroCaracter === 'optativo') return !c.obligatorio;
+        return true;
+    });
+
     return (
         <DashboardLayout
             title="Academia y Cursos Operativos"
-            subtitle="Formación institucional, manuales internos y acceso oficial a Academia SENAPRED / SINAPRED"
+            subtitle="Formación institucional, cursos obligatorios y optativos, y plataformas gratuitas de emergencia"
             actions={
-                puedePublicar && (
+                esSuperadmin && (
                     <button
                         onClick={() => setShowModal(true)}
                         className="inline-flex items-center gap-2 rounded-xl bg-[#D90429] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-red-700"
                     >
-                        <Plus size={18} strokeWidth={2.5} /> Publicar Curso
+                        <Plus size={18} strokeWidth={2.5} /> Agregar Curso
                     </button>
                 )
             }
         >
             {/* Banner Destacado Academia SENAPRED / SINAPRED */}
-            <div className="mb-8 rounded-2xl border-2 border-[#0A0A0A] bg-[#0A0A0A] p-6 text-white shadow-xl sm:p-8">
+            <div className="mb-6 rounded-2xl border-2 border-[#0A0A0A] bg-[#0A0A0A] p-6 text-white shadow-xl sm:p-8">
                 <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
                     <div className="space-y-2">
                         <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#F2B632] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-black">
-                            <ShieldAlert size={14} strokeWidth={2.5} /> Convenio / Sistema Nacional SINAPRED
+                            <ShieldAlert size={14} strokeWidth={2.5} /> Sistema Nacional SINAPRED
                         </span>
                         <h2 className="text-xl font-black uppercase tracking-tight sm:text-2xl">
                             Portal Oficial Academia SENAPRED Chile
                         </h2>
                         <p className="max-w-2xl text-sm font-medium text-neutral-300">
-                            Accede directamente a los cursos gratuitos certificados del Servicio
-                            Nacional de Prevención y Respuesta ante Desastres. Una vez aprobado
-                            tu curso, descarga tu diploma y súbelo en <strong>Mi Ficha y Credencial</strong> para validarlo en tu hoja de vida.
+                            Accede a los cursos gratuitos del Servicio Nacional de Prevención y
+                            Respuesta ante Desastres y otras plataformas gratuitas integradas.
+                            Al aprobar un curso, descarga tu certificado y súbelo en{' '}
+                            <strong>Mi Ficha y Credencial</strong>.
                         </p>
                     </div>
 
@@ -135,21 +195,46 @@ export default function Cursos() {
                 </div>
             </div>
 
-            {/* Listado de Cursos y Material */}
+            {/* Filtro Obligatorio / Optativo */}
+            <div className="mb-6 flex flex-wrap gap-2">
+                {[
+                    { key: 'todos', label: `Todos (${cursos.length + PLATAFORMAS_GRATUITAS.length})` },
+                    { key: 'obligatorio', label: 'Obligatorios' },
+                    { key: 'optativo', label: 'Optativos' },
+                ].map((f) => (
+                    <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setFiltroCaracter(f.key)}
+                        className={`rounded-xl px-4 py-2 text-xs font-black uppercase transition-colors ${filtroCaracter === f.key
+                                ? 'bg-[#0A0A0A] text-[#F2B632]'
+                                : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
+                            }`}
+                    >
+                        {f.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Listado de Cursos y Plataformas Gratuitas */}
             {loading ? (
                 <p className="py-10 text-center text-sm font-bold text-neutral-500">
                     Cargando catálogo de capacitación...
                 </p>
-            ) : cursos.length === 0 ? (
+            ) : catalogoCombinado.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-12 text-center">
-                    <GraduationCap size={44} strokeWidth={2} className="mx-auto mb-3 text-neutral-300" />
+                    <GraduationCap
+                        size={44}
+                        strokeWidth={2}
+                        className="mx-auto mb-3 text-neutral-300"
+                    />
                     <p className="text-sm font-bold text-neutral-500">
-                        No hay cursos adicionales publicados aún.
+                        No hay cursos disponibles en este filtro.
                     </p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    {cursos.map((curso) => (
+                    {catalogoCombinado.map((curso) => (
                         <div
                             key={curso.id}
                             className="flex flex-col justify-between rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
@@ -157,17 +242,24 @@ export default function Cursos() {
                             <div>
                                 <div className="mb-3 flex items-start justify-between gap-2">
                                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-neutral-700">
-                                        <BookOpen size={13} strokeWidth={2.5} className="text-[#D90429]" />
+                                        <BookOpen
+                                            size={13}
+                                            strokeWidth={2.5}
+                                            className="text-[#D90429]"
+                                        />
                                         {curso.entidad}
                                     </span>
 
                                     <div className="flex items-center gap-2">
-                                        {curso.obligatorio && (
-                                            <span className="rounded-lg bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">
-                                                Recomendado / Base
-                                            </span>
-                                        )}
-                                        {puedePublicar && (
+                                        <span
+                                            className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase ${curso.obligatorio
+                                                    ? 'bg-red-100 text-[#D90429]'
+                                                    : 'bg-emerald-100 text-emerald-800'
+                                                }`}
+                                        >
+                                            {curso.obligatorio ? 'Obligatorio' : 'Optativo'}
+                                        </span>
+                                        {esSuperadmin && !curso.esPlataformaBase && (
                                             <button
                                                 onClick={() => handleEliminar(curso.id)}
                                                 className="rounded-lg p-1 text-neutral-400 hover:bg-red-50 hover:text-[#D90429]"
@@ -183,33 +275,36 @@ export default function Cursos() {
                                     {curso.titulo}
                                 </h3>
                                 <p className="mt-2 text-xs font-medium leading-relaxed text-neutral-600">
-                                    {curso.descripcion || 'Material de formación operativa BRE Bío-Bío.'}
+                                    {curso.descripcion ||
+                                        'Material de formación operativa BRE Bío-Bío.'}
                                 </p>
                             </div>
 
-                            <div className="mt-6 border-t border-neutral-100 pt-4">
-                                <a
-                                    href={curso.url_recurso}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-800"
-                                >
-                                    <span>Acceder al Curso / Material</span>
-                                    <ExternalLink size={15} strokeWidth={2.5} />
-                                </a>
-                            </div>
+                            {curso.url_recurso && (
+                                <div className="mt-6 border-t border-neutral-100 pt-4">
+                                    <a
+                                        href={curso.url_recurso}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-neutral-800"
+                                    >
+                                        <span>Acceder al Curso / Plataforma</span>
+                                        <ExternalLink size={15} strokeWidth={2.5} />
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* Modal Publicar Curso */}
-            {showModal && (
+            {/* Modal Agregar Curso Manual (Exclusivo Superadmin) */}
+            {showModal && esSuperadmin && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
                     <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
                         <div className="mb-4 flex items-center justify-between border-b border-neutral-100 pb-3">
                             <h3 className="text-lg font-black uppercase text-neutral-950">
-                                Publicar Curso o Material
+                                Agregar Curso Manual
                             </h3>
                             <button
                                 onClick={() => setShowModal(false)}
@@ -239,7 +334,7 @@ export default function Cursos() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                                        Institución Emisora
+                                        Institución / Plataforma
                                     </label>
                                     <input
                                         type="text"
@@ -255,18 +350,20 @@ export default function Cursos() {
 
                                 <div>
                                     <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                                        Tipo de Recurso
+                                        Carácter del Curso
                                     </label>
                                     <select
-                                        value={nuevoCurso.tipo}
+                                        value={nuevoCurso.obligatorio ? 'obligatorio' : 'optativo'}
                                         onChange={(e) =>
-                                            setNuevoCurso({ ...nuevoCurso, tipo: e.target.value })
+                                            setNuevoCurso({
+                                                ...nuevoCurso,
+                                                obligatorio: e.target.value === 'obligatorio',
+                                            })
                                         }
-                                        className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-semibold"
+                                        className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm font-black uppercase"
                                     >
-                                        <option value="externo">Plataforma Externa (Link)</option>
-                                        <option value="interno">Curso Interno ONG</option>
-                                        <option value="manual">Manual / Protocolo PDF</option>
+                                        <option value="obligatorio">Obligatorio</option>
+                                        <option value="optativo">Optativo</option>
                                     </select>
                                 </div>
                             </div>
@@ -277,7 +374,6 @@ export default function Cursos() {
                                 </label>
                                 <input
                                     type="url"
-                                    required
                                     value={nuevoCurso.url_recurso}
                                     onChange={(e) =>
                                         setNuevoCurso({
@@ -303,25 +399,10 @@ export default function Cursos() {
                                             descripcion: e.target.value,
                                         })
                                     }
-                                    placeholder="Objetivos del curso, requisitos o instrucciones de inscripción..."
+                                    placeholder="Objetivos del curso, requisitos o instrucciones..."
                                     className="w-full resize-none rounded-xl border border-neutral-300 px-3.5 py-2.5 text-sm font-semibold"
                                 />
                             </div>
-
-                            <label className="flex items-center gap-2 text-xs font-bold text-neutral-700">
-                                <input
-                                    type="checkbox"
-                                    checked={nuevoCurso.obligatorio}
-                                    onChange={(e) =>
-                                        setNuevoCurso({
-                                            ...nuevoCurso,
-                                            obligatorio: e.target.checked,
-                                        })
-                                    }
-                                    className="h-4 w-4 rounded border-neutral-300 text-[#D90429]"
-                                />
-                                Marcar como curso base recomendado para voluntarios
-                            </label>
 
                             <div className="flex justify-end gap-2 pt-2">
                                 <button
@@ -336,7 +417,7 @@ export default function Cursos() {
                                     disabled={saving}
                                     className="rounded-xl bg-[#D90429] px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
                                 >
-                                    {saving ? 'Publicando...' : 'Publicar'}
+                                    {saving ? 'Guardando...' : 'Guardar Curso'}
                                 </button>
                             </div>
                         </form>
