@@ -9,6 +9,9 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
+  Plus,
+  Trash2,
+  FileText,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +39,21 @@ const CONTENIDOS_POR_DEFECTO = {
   postular_youtube_2: 'ysz5S6PUM-U',
 };
 
+const MEMORIAS_POR_DEFECTO = [
+  {
+    anio: '2025',
+    titulo: 'Memoria Anual Institucional 2025',
+    portada: '/memorias/portada-2025.png',
+    pdf: '/memorias/memoria-2025.pdf',
+  },
+  {
+    anio: '2024',
+    titulo: 'Memoria Anual Institucional 2024',
+    portada: '/memorias/portada-2024.png',
+    pdf: '/memorias/memoria-2024.pdf',
+  },
+];
+
 export default function ConfiguracionSitio() {
   const { profile } = useAuth();
   const [seccion, setSeccion] = useState('general');
@@ -47,6 +65,14 @@ export default function ConfiguracionSitio() {
     tiktok_url: '',
   });
   const [contenidos, setContenidos] = useState(CONTENIDOS_POR_DEFECTO);
+  const [memorias, setMemorias] = useState(MEMORIAS_POR_DEFECTO);
+  const [nuevaMemoria, setNuevaMemoria] = useState({
+    anio: '',
+    titulo: '',
+    portada: '',
+    pdf: '',
+  });
+  const [subiendoArchivo, setSubiendoArchivo] = useState('');
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [estadoMsg, setEstadoMsg] = useState({ type: '', text: '' });
@@ -71,6 +97,9 @@ export default function ConfiguracionSitio() {
         });
         if (data.contenidos_json && typeof data.contenidos_json === 'object') {
           setContenidos({ ...CONTENIDOS_POR_DEFECTO, ...data.contenidos_json });
+          if (Array.isArray(data.contenidos_json.memorias)) {
+            setMemorias(data.contenidos_json.memorias);
+          }
         }
       }
     };
@@ -112,6 +141,70 @@ export default function ConfiguracionSitio() {
     }
   };
 
+  const handleSubirArchivoMemoria = async (file, carpeta, onSuccess, keyId) => {
+    if (!file || !esSuperadmin) return;
+    setSubiendoArchivo(keyId);
+    setEstadoMsg({ type: '', text: '' });
+
+    try {
+      const ext = file.name.split('.').pop();
+      const ruta = `memorias/${carpeta}/mem_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('sitio')
+        .upload(ruta, file, { upsert: true });
+
+      if (upErr) throw upErr;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('sitio').getPublicUrl(ruta);
+
+      onSuccess(publicUrl);
+      setEstadoMsg({
+        type: 'success',
+        text: 'Archivo subido al bucket sitio. Presiona "Guardar Cambios" para publicarlo.',
+      });
+    } catch (err) {
+      setEstadoMsg({
+        type: 'error',
+        text: err.message || 'No se pudo subir el archivo.',
+      });
+    } finally {
+      setSubiendoArchivo('');
+    }
+  };
+
+  const handleAgregarMemoria = () => {
+    if (!nuevaMemoria.anio.trim() || !nuevaMemoria.titulo.trim()) {
+      setEstadoMsg({
+        type: 'error',
+        text: 'Ingresa al menos el año y título de la memoria anual.',
+      });
+      return;
+    }
+
+    setMemorias((prev) => [
+      {
+        anio: nuevaMemoria.anio.trim(),
+        titulo: nuevaMemoria.titulo.trim(),
+        portada: nuevaMemoria.portada.trim(),
+        pdf: nuevaMemoria.pdf.trim(),
+      },
+      ...prev,
+    ]);
+    setNuevaMemoria({ anio: '', titulo: '', portada: '', pdf: '' });
+  };
+
+  const handleEliminarMemoria = (idx) => {
+    setMemorias((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleActualizarMemoria = (idx, campo, valor) => {
+    setMemorias((prev) =>
+      prev.map((m, i) => (i === idx ? { ...m, [campo]: valor } : m))
+    );
+  };
+
   const handleGuardarTodo = async (e) => {
     e.preventDefault();
     if (!esSuperadmin) return;
@@ -127,7 +220,10 @@ export default function ConfiguracionSitio() {
           instagram_url: redes.instagram_url.trim(),
           facebook_url: redes.facebook_url.trim(),
           tiktok_url: redes.tiktok_url.trim(),
-          contenidos_json: contenidos,
+          contenidos_json: {
+            ...contenidos,
+            memorias,
+          },
           updated_at: new Date().toISOString(),
         },
       ],
@@ -408,6 +504,214 @@ export default function ConfiguracionSitio() {
                   }
                   className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
                 />
+              </div>
+
+              {/* Gestión Dinámica de Memorias Anuales */}
+              <div className="space-y-4 border-t border-neutral-200 pt-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                    <FileText size={15} className="text-[#D90429]" />
+                    Memorias Anuales (Portada + PDF / Google Drive)
+                  </h3>
+                </div>
+
+                {/* Agregar Nueva Memoria */}
+                <div className="space-y-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-neutral-700">
+                    Agregar Nueva Memoria
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                    <input
+                      type="text"
+                      value={nuevaMemoria.anio}
+                      onChange={(e) =>
+                        setNuevaMemoria({ ...nuevaMemoria, anio: e.target.value })
+                      }
+                      placeholder="Año (ej. 2026)"
+                      className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
+                    />
+                    <input
+                      type="text"
+                      value={nuevaMemoria.titulo}
+                      onChange={(e) =>
+                        setNuevaMemoria({ ...nuevaMemoria, titulo: e.target.value })
+                      }
+                      placeholder="Título de la memoria"
+                      className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={nuevaMemoria.portada}
+                        onChange={(e) =>
+                          setNuevaMemoria({ ...nuevaMemoria, portada: e.target.value })
+                        }
+                        placeholder="URL portada o sube imagen"
+                        className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
+                      />
+                      <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-[11px] font-black uppercase text-white hover:bg-neutral-800">
+                        <Upload size={13} />
+                        <span>{subiendoArchivo === 'nueva-portada' ? '...' : 'Foto'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            handleSubirArchivoMemoria(
+                              e.target.files?.[0],
+                              'portadas',
+                              (url) =>
+                                setNuevaMemoria((prev) => ({ ...prev, portada: url })),
+                              'nueva-portada'
+                            )
+                          }
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={nuevaMemoria.pdf}
+                        onChange={(e) =>
+                          setNuevaMemoria({ ...nuevaMemoria, pdf: e.target.value })
+                        }
+                        placeholder="URL PDF / Google Drive o sube PDF"
+                        className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
+                      />
+                      <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-[11px] font-black uppercase text-white hover:bg-neutral-800">
+                        <Upload size={13} />
+                        <span>{subiendoArchivo === 'nuevo-pdf' ? '...' : 'PDF'}</span>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) =>
+                            handleSubirArchivoMemoria(
+                              e.target.files?.[0],
+                              'pdfs',
+                              (url) =>
+                                setNuevaMemoria((prev) => ({ ...prev, pdf: url })),
+                              'nuevo-pdf'
+                            )
+                          }
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAgregarMemoria}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
+                  >
+                    <Plus size={14} /> Agregar Memoria
+                  </button>
+                </div>
+
+                {/* Lista de Memorias Configuradas */}
+                <div className="space-y-3">
+                  {memorias.map((mem, idx) => (
+                    <div
+                      key={`${mem.anio}-${idx}`}
+                      className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-4">
+                          <input
+                            type="text"
+                            value={mem.anio}
+                            onChange={(e) =>
+                              handleActualizarMemoria(idx, 'anio', e.target.value)
+                            }
+                            placeholder="Año"
+                            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-bold"
+                          />
+                          <input
+                            type="text"
+                            value={mem.titulo}
+                            onChange={(e) =>
+                              handleActualizarMemoria(idx, 'titulo', e.target.value)
+                            }
+                            placeholder="Título"
+                            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold sm:col-span-3"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarMemoria(idx)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-black uppercase text-[#D90429] hover:bg-red-100"
+                        >
+                          <Trash2 size={13} /> Eliminar
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={mem.portada || mem.portada_url || ''}
+                            onChange={(e) =>
+                              handleActualizarMemoria(idx, 'portada', e.target.value)
+                            }
+                            placeholder="URL portada"
+                            className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                          />
+                          <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg bg-neutral-900 px-3 py-1.5 text-[11px] font-black uppercase text-white hover:bg-neutral-700">
+                            <Upload size={12} />
+                            <span>
+                              {subiendoArchivo === `portada-${idx}` ? '...' : 'Foto'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) =>
+                                handleSubirArchivoMemoria(
+                                  e.target.files?.[0],
+                                  'portadas',
+                                  (url) => handleActualizarMemoria(idx, 'portada', url),
+                                  `portada-${idx}`
+                                )
+                              }
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={mem.pdf || mem.descarga_url || ''}
+                            onChange={(e) =>
+                              handleActualizarMemoria(idx, 'pdf', e.target.value)
+                            }
+                            placeholder="URL PDF / Google Drive"
+                            className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                          />
+                          <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg bg-neutral-900 px-3 py-1.5 text-[11px] font-black uppercase text-white hover:bg-neutral-700">
+                            <Upload size={12} />
+                            <span>
+                              {subiendoArchivo === `pdf-${idx}` ? '...' : 'PDF'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              onChange={(e) =>
+                                handleSubirArchivoMemoria(
+                                  e.target.files?.[0],
+                                  'pdfs',
+                                  (url) => handleActualizarMemoria(idx, 'pdf', url),
+                                  `pdf-${idx}`
+                                )
+                              }
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import {
-    User,
     Camera,
     Download,
     Clock,
@@ -183,8 +182,7 @@ export default function MiPerfil() {
             setForm({
                 nombre_completo: profile.nombre_completo || '',
                 rut: profile.rut ? formatearRutChileno(profile.rut) : '',
-                genero:
-                    profile.genero === 'femenino' ? 'femenino' : 'masculino',
+                genero: profile.genero === 'femenino' ? 'femenino' : 'masculino',
                 telefono: profile.telefono || '',
                 region: profile.region || 'Región del Biobío',
                 comuna: profile.comuna || 'Concepción',
@@ -415,18 +413,9 @@ export default function MiPerfil() {
             return;
         }
 
-        if (!form.foto_url && !form.usando_avatar_generico) {
-            setStatus({
-                type: 'error',
-                message:
-                    'Sube tu fotografía institucional o selecciona el Avatar Genérico provisorio (7 días).',
-            });
-            return;
-        }
-
         setSaving(true);
         try {
-            const esGenerico = !form.foto_url && form.usando_avatar_generico;
+            const esGenerico = !form.foto_url;
             const textoEspecialidadLegacy = form.especialidades.join(', ');
 
             const payload = {
@@ -457,6 +446,11 @@ export default function MiPerfil() {
                 .eq('id', user.id);
 
             if (error) throw error;
+
+            setForm((prev) => ({
+                ...prev,
+                usando_avatar_generico: esGenerico,
+            }));
 
             if (refreshProfile) await refreshProfile();
             setStatus({
@@ -521,7 +515,7 @@ export default function MiPerfil() {
     // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL (1012 x 638) SOBRE TUS PLANTILLAS
     // ============================================================================
     useEffect(() => {
-        if (!aprobado || !profile?.codigo_credencial) return;
+        if (!aprobado) return;
         if (!canvasFrenteRef.current || !canvasReversoRef.current) return;
 
         const cargarImagen = (src, fallbackSrc) =>
@@ -552,7 +546,10 @@ export default function MiPerfil() {
             cFrente.width = W;
             cFrente.height = H;
 
-            const imgBaseFrente = await cargarImagen('/credencial-frente.png');
+            const imgBaseFrente =
+                (await cargarImagen('/credencial-frente.png')) ||
+                (await cargarImagen('/credencial-frente.jpg'));
+
             if (imgBaseFrente) {
                 ctxF.drawImage(imgBaseFrente, 0, 0, W, H);
             } else {
@@ -564,13 +561,21 @@ export default function MiPerfil() {
                 ctxF.fillRect(0, 515, W, 123);
             }
 
-            // Fotografía del Voluntario en el recuadro izquierdo (X: 35, Y: 72, W: 300, H: 400)
-            const fotoSrc =
-                profile.foto_url || obtenerAvatarGenericoUrl(form.genero);
-            const imgFoto = await cargarImagen(
-                fotoSrc,
-                RESPALDO_AVATAR_SVG(form.genero)
-            );
+            // Fotografía del Voluntario o Avatar Uniformado en recuadro izquierdo
+            const avatarGenPng =
+                form.genero === 'femenino'
+                    ? '/avatar-femenino.png'
+                    : '/avatar-masculino.png';
+            const avatarGenJpg =
+                form.genero === 'femenino'
+                    ? '/avatar-femenino.jpg'
+                    : '/avatar-masculino.jpg';
+
+            const imgFoto = profile?.foto_url
+                ? await cargarImagen(profile.foto_url, RESPALDO_AVATAR_SVG(form.genero))
+                : (await cargarImagen(avatarGenPng)) ||
+                (await cargarImagen(avatarGenJpg, RESPALDO_AVATAR_SVG(form.genero)));
+
             if (imgFoto) {
                 ctxF.save();
                 ctxF.beginPath();
@@ -580,16 +585,15 @@ export default function MiPerfil() {
                 ctxF.restore();
             }
 
-            // Franja Roja: Rol o Cargo Principal (ej. VOLUNTARIO / DIRECTOR OPERATIVO)
-            const cargosLista = Array.isArray(profile.cargos_operativos)
+            // Franja Roja: Rol o Cargo Principal
+            const cargosLista = Array.isArray(profile?.cargos_operativos)
                 ? profile.cargos_operativos
                 : [];
-            const tituloFranjaRoja =
-                cargosLista.includes('do')
-                    ? 'DIRECTOR OPERATIVO'
-                    : rol === 'director'
-                        ? 'DIRECTOR GENERAL'
-                        : rol.toUpperCase();
+            const tituloFranjaRoja = cargosLista.includes('do')
+                ? 'DIRECTOR OPERATIVO'
+                : rol === 'director'
+                    ? 'DIRECTOR GENERAL'
+                    : rol.toUpperCase();
 
             ctxF.fillStyle = '#FFFFFF';
             ctxF.textAlign = 'left';
@@ -600,7 +604,7 @@ export default function MiPerfil() {
             ctxF.fillStyle = '#111827';
             ctxF.font = '900 28px sans-serif';
             ctxF.fillText(
-                (profile.nombre_completo || 'NOMBRE COMPLETO').toUpperCase(),
+                (form.nombre_completo || profile?.nombre_completo || 'NOMBRE COMPLETO').toUpperCase(),
                 420,
                 345,
                 550
@@ -609,7 +613,7 @@ export default function MiPerfil() {
             // RUT Formateado
             ctxF.font = '900 26px sans-serif';
             ctxF.fillText(
-                formatearRutChileno(profile.rut) || '12.345.678-9',
+                formatearRutChileno(form.rut || profile?.rut) || '12.345.678-9',
                 420,
                 418
             );
@@ -622,7 +626,13 @@ export default function MiPerfil() {
             ctxF.fillText(espResumen, 420, 488, 550);
 
             // Barra Inferior Negra: ID Institucional + Emisión + Vigencia
-            const fechaEmision = profile.creado_en
+            const codigoMostrar =
+                profile?.codigo_credencial ||
+                (form.rut
+                    ? `BRE-${form.rut.replace(/[^0-9]/g, '').slice(0, 6)}`
+                    : 'BRE-000000');
+
+            const fechaEmision = profile?.creado_en
                 ? new Date(profile.creado_en)
                 : new Date();
             const fechaVigencia = new Date(fechaEmision);
@@ -635,7 +645,7 @@ export default function MiPerfil() {
 
             ctxF.fillStyle = '#FFFFFF';
             ctxF.font = '900 28px sans-serif';
-            ctxF.fillText(profile.codigo_credencial, 92, 588);
+            ctxF.fillText(codigoMostrar, 92, 588);
 
             ctxF.font = '800 23px sans-serif';
             ctxF.fillText(fmtFecha(fechaEmision), 395, 588);
@@ -647,7 +657,10 @@ export default function MiPerfil() {
             cReverso.width = W;
             cReverso.height = H;
 
-            const imgBaseReverso = await cargarImagen('/credencial-reverso.png');
+            const imgBaseReverso =
+                (await cargarImagen('/credencial-reverso.png')) ||
+                (await cargarImagen('/credencial-reverso.jpg'));
+
             if (imgBaseReverso) {
                 ctxR.drawImage(imgBaseReverso, 0, 0, W, H);
             } else {
@@ -669,7 +682,7 @@ export default function MiPerfil() {
                     : 'N/E';
             ctxR.fillText(gsTexto, 868, 145);
 
-            // Caja Gris 1: Especialidad (X: 142, Y: 255, W: 455)
+            // Caja Gris 1: Especialidad
             ctxR.fillStyle = '#111827';
             ctxR.textAlign = 'left';
             ctxR.font = '800 20px sans-serif';
@@ -679,14 +692,16 @@ export default function MiPerfil() {
                     : 'BÚSQUEDA Y RESCATE EN EMERGENCIAS';
             ctxR.fillText(textoEspReverso, 158, 296, 440);
 
-            // Caja Gris 2: Antecedentes Médicos - Alergias (X: 142, Y: 392, W: 455)
+            // Caja Gris 2: Antecedentes Médicos - Alergias
             ctxR.font = '800 19px sans-serif';
-            const textoAlergias = (form.alergias || 'SIN ANTECEDENTES RELEVANTES').toUpperCase();
+            const textoAlergias = (
+                form.alergias || 'SIN ANTECEDENTES RELEVANTES'
+            ).toUpperCase();
             ctxR.fillText(textoAlergias, 158, 434, 440);
 
-            // Código QR dentro del recuadro blanco con borde rojo (X: 702, Y: 192, Size: 278)
+            // Código QR dentro del recuadro blanco con borde rojo
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
-                profile.codigo_credencial
+                codigoMostrar
             )}`;
             const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
                 width: 265,
@@ -709,9 +724,13 @@ export default function MiPerfil() {
         const canvas =
             lado === 'frente' ? canvasFrenteRef.current : canvasReversoRef.current;
         if (!canvas) return;
+        const codigo =
+            profile?.codigo_credencial ||
+            (form.rut
+                ? `BRE-${form.rut.replace(/[^0-9]/g, '').slice(0, 6)}`
+                : 'BRE');
         const enlace = document.createElement('a');
-        enlace.download = `Credencial_${lado.toUpperCase()}_${profile?.codigo_credencial || 'BRE'
-            }.png`;
+        enlace.download = `Credencial_${lado.toUpperCase()}_${codigo}.png`;
         enlace.href = canvas.toDataURL('image/png');
         enlace.click();
     };
@@ -886,12 +905,7 @@ export default function MiPerfil() {
                         <div className="flex flex-col items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-5 sm:flex-row">
                             <div className="flex h-28 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-[#0A0A0A] bg-white">
                                 <img
-                                    src={
-                                        form.foto_url ||
-                                        (form.usando_avatar_generico
-                                            ? obtenerAvatarGenericoUrl(form.genero)
-                                            : RESPALDO_AVATAR_SVG(form.genero))
-                                    }
+                                    src={form.foto_url || obtenerAvatarGenericoUrl(form.genero)}
                                     onError={(e) => {
                                         e.currentTarget.src = RESPALDO_AVATAR_SVG(form.genero);
                                     }}

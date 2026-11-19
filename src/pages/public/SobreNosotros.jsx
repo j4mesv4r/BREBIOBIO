@@ -27,6 +27,15 @@ const MEMORIAS_ANUALES = [
   },
 ];
 
+const obtenerEnlaceDescargaMemoria = (url = '') => {
+  const limpio = url.trim();
+  const matchDrive = limpio.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchDrive?.[1]) {
+    return `https://drive.google.com/uc?export=download&id=${matchDrive[1]}`;
+  }
+  return limpio;
+};
+
 const FondoTopograficoInstitucion = () => (
   <svg
     aria-hidden="true"
@@ -268,39 +277,54 @@ export default function SobreNosotros() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {MEMORIAS_ANUALES.map((mem) => (
-              <div
-                key={mem.anio}
-                className="overflow-hidden rounded-2xl border-2 border-neutral-800 bg-neutral-900 shadow-xl"
-              >
-                <div className="relative flex h-56 w-full items-center justify-center overflow-hidden bg-neutral-800">
-                  <FileText size={48} className="text-neutral-500" />
-                  <img
-                    src={mem.portada}
-                    alt={`Portada ${mem.titulo}`}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
+            {(Array.isArray(cfgWeb.memorias) && cfgWeb.memorias.length > 0
+              ? cfgWeb.memorias
+              : MEMORIAS_ANUALES
+            ).map((mem, idx) => {
+              const portadaUrl = mem.portada || mem.portada_url || '';
+              const descargaUrl = obtenerEnlaceDescargaMemoria(
+                mem.pdf || mem.descarga_url || ''
+              );
+              const esDrive = descargaUrl.includes('drive.google.com');
+
+              return (
+                <div
+                  key={`${mem.anio}-${idx}`}
+                  className="overflow-hidden rounded-2xl border-2 border-neutral-800 bg-neutral-900 shadow-xl"
+                >
+                  <div className="relative flex h-56 w-full items-center justify-center overflow-hidden bg-neutral-800">
+                    <FileText size={48} className="text-neutral-500" />
+                    {portadaUrl && (
+                      <img
+                        src={portadaUrl}
+                        alt={`Portada ${mem.titulo}`}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <span className="rounded bg-[#F2B632] px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
+                      Memoria {mem.anio}
+                    </span>
+                    <h3 className="mt-2 text-base font-black text-white">
+                      {mem.titulo}
+                    </h3>
+                    <a
+                      href={descargaUrl}
+                      {...(esDrive
+                        ? { target: '_blank', rel: 'noopener noreferrer' }
+                        : { download: true })}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#D90429] px-4 py-2.5 text-xs font-black uppercase text-white transition-colors hover:bg-red-700"
+                    >
+                      <Download size={15} /> Descargar PDF
+                    </a>
+                  </div>
                 </div>
-                <div className="p-5">
-                  <span className="rounded bg-[#F2B632] px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
-                    Memoria {mem.anio}
-                  </span>
-                  <h3 className="mt-2 text-base font-black text-white">
-                    {mem.titulo}
-                  </h3>
-                  <a
-                    href={mem.pdf}
-                    download
-                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#D90429] px-4 py-2.5 text-xs font-black uppercase text-white transition-colors hover:bg-red-700"
-                  >
-                    <Download size={15} /> Descargar PDF
-                  </a>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
