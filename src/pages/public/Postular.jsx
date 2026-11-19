@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -9,8 +10,12 @@ import {
   UserPlus,
   FileText,
   Lock,
+  ArrowRight,
+  Edit3,
 } from 'lucide-react';
 import { REGIONES_CHILE } from '../../data/chileRegionesComunas';
+
+const STORAGE_KEY_PRE_POSTULACION = 'bre_biobio_borrador_postulacion_v1';
 
 const EQUIPOS_OPERATIVOS = [
   'Búsqueda y Rescate',
@@ -36,6 +41,7 @@ export default function Postular() {
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [pasoVinculacionListo, setPasoVinculacionListo] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const [formData, setFormData] = useState({
@@ -61,46 +67,137 @@ export default function Postular() {
     telefono_apoderado: '',
   });
 
+  // Recuperar borrador local si existe (por ejemplo, justo después de volver de Google OAuth)
   useEffect(() => {
-    if (profile) {
-      setFormData((prev) => ({
-        ...prev,
-        ya_es_voluntario: Boolean(profile.ya_es_voluntario || prev.ya_es_voluntario),
-        nombre_completo:
-          profile.nombre_completo ||
-          user?.user_metadata?.full_name ||
-          prev.nombre_completo,
-        rut: profile.rut ? formatearRutChileno(profile.rut) : prev.rut,
-        fecha_nacimiento: profile.fecha_nacimiento
-          ? String(profile.fecha_nacimiento).slice(0, 10)
-          : prev.fecha_nacimiento,
-        telefono: profile.telefono || prev.telefono,
-        region: profile.region || prev.region,
-        comuna: profile.comuna || prev.comuna,
-        experiencia_previa: Boolean(profile.experiencia_previa),
-        detalle_experiencia: profile.detalle_experiencia || '',
-        formacion_afines: Boolean(profile.formacion_afines),
-        detalle_formacion_cursos: profile.detalle_formacion_cursos || '',
-        motivacion: profile.motivacion || '',
-        disp_entrenamientos: profile.disp_entrenamientos || 'Si',
-        disp_emergencias_biobio: profile.disp_emergencias_biobio || 'Si',
-        condicion_medica_terreno: Boolean(profile.condicion_medica_terreno),
-        detalle_condicion_medica: profile.detalle_condicion_medica || '',
-        equipos_interes:
-          Array.isArray(profile.equipos_interes) && profile.equipos_interes.length > 0
-            ? profile.equipos_interes
-            : prev.equipos_interes,
-        nombre_apoderado: profile.nombre_apoderado || '',
-        telefono_apoderado: profile.telefono_apoderado || '',
-        autorizacion_parental_confirmada: Boolean(profile.es_menor_autorizado),
-      }));
-    } else if (user?.user_metadata?.full_name) {
-      setFormData((prev) => ({
-        ...prev,
-        nombre_completo: prev.nombre_completo || user.user_metadata.full_name,
-      }));
+    try {
+      const guardado = localStorage.getItem(STORAGE_KEY_PRE_POSTULACION);
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        setFormData((prev) => ({ ...prev, ...parsed }));
+        if (parsed.nombre_completo || parsed.ya_es_voluntario) {
+          setPasoVinculacionListo(true);
+        }
+      }
+    } catch {
+      // Ignorar error de lectura de localStorage
     }
-  }, [profile, user]);
+  }, []);
+
+  // Cuando el usuario ya vinculó Gmail / inició sesión, aplicar automáticamente el borrador guardado
+  useEffect(() => {
+    const sincronizarBorradorConCuenta = async () => {
+      if (!user?.id) return;
+
+      let borrador = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_PRE_POSTULACION);
+        if (raw) borrador = JSON.parse(raw);
+      } catch {
+        borrador = null;
+      }
+
+      const origen = borrador || {};
+      const tieneDatosBorrador = Boolean(
+        origen.nombre_completo || origen.rut || origen.ya_es_voluntario
+      );
+
+      if (!tieneDatosBorrador) return;
+
+      const rutLimpio = formatearRutChileno(
+        origen.rut || profile?.rut || ''
+      );
+      const digitosRut = rutLimpio.replace(/[^0-9]/g, '');
+      const codigoBre =
+        profile?.codigo_credencial ||
+        (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
+
+      const payload = {
+        ya_es_voluntario: Boolean(origen.ya_es_voluntario),
+        nombre_completo:
+          (origen.nombre_completo || '').trim() ||
+          profile?.nombre_completo ||
+          user.user_metadata?.full_name ||
+          '',
+        email: user.email,
+        rut: rutLimpio,
+        codigo_credencial: codigoBre,
+        fecha_nacimiento: origen.fecha_nacimiento || null,
+        telefono: (origen.telefono || '').trim(),
+        region: origen.region || 'Región del Biobío',
+        comuna: (origen.comuna || 'Concepción').trim(),
+        experiencia_previa: Boolean(origen.experiencia_previa),
+        detalle_experiencia: origen.experiencia_previa
+          ? (origen.detalle_experiencia || '').trim()
+          : '',
+        formacion_afines: Boolean(origen.formacion_afines),
+        detalle_formacion_cursos: origen.formacion_afines
+          ? (origen.detalle_formacion_cursos || '').trim()
+          : '',
+        motivacion: (origen.motivacion || '').trim(),
+        disp_entrenamientos: origen.disp_entrenamientos || 'Si',
+        disp_emergencias_biobio: origen.disp_emergencias_biobio || 'Si',
+        condicion_medica_terreno: Boolean(origen.condicion_medica_terreno),
+        detalle_condicion_medica: origen.condicion_medica_terreno
+          ? (origen.detalle_condicion_medica || '').trim() ||
+          'Especificado por postulante'
+          : 'Ninguna',
+        equipos_interes:
+          Array.isArray(origen.equipos_interes) &&
+            origen.equipos_interes.length > 0
+            ? origen.equipos_interes
+            : ['Búsqueda y Rescate'],
+        especialidades_pendientes:
+          Array.isArray(origen.equipos_interes) &&
+            origen.equipos_interes.length > 0
+            ? origen.equipos_interes
+            : ['Búsqueda y Rescate'],
+        es_menor_autorizado: Boolean(origen.es_menor_autorizado),
+        nombre_apoderado: origen.es_menor_autorizado
+          ? (origen.nombre_apoderado || '').trim()
+          : null,
+        telefono_apoderado: origen.es_menor_autorizado
+          ? (origen.telefono_apoderado || '').trim()
+          : null,
+        rol:
+          (profile?.rol || 'postulante').toLowerCase() === 'postulante'
+            ? 'postulante'
+            : profile.rol,
+        estado_validacion:
+          profile?.estado_validacion === 'aprobado' ? 'aprobado' : 'pendiente',
+        onboarding_completado: true,
+      };
+
+      setLoading(true);
+      try {
+        const { error } = await supabase
+          .from('perfiles')
+          .update(payload)
+          .eq('id', user.id);
+
+        if (!error) {
+          await supabase.from('notificaciones_directorio').insert([
+            {
+              perfil_origen_id: user.id,
+              tipo: 'antecedentes',
+              titulo: origen.ya_es_voluntario
+                ? `Acceso vinculado (Declara ya ser voluntario): ${payload.nombre_completo}`
+                : `Postulación vinculada a cuenta: ${payload.nombre_completo}`,
+              detalle: `Correo: ${user.email} · RUT: ${rutLimpio} · Comuna: ${payload.comuna} · Equipos: ${payload.equipos_interes.join(', ')}`,
+              leida: false,
+            },
+          ]);
+
+          localStorage.removeItem(STORAGE_KEY_PRE_POSTULACION);
+          if (refreshProfile) await refreshProfile();
+          setEnviado(true);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    sincronizarBorradorConCuenta();
+  }, [user, profile, refreshProfile]);
 
   const calcularEdad = (fechaNac) => {
     if (!fechaNac) return null;
@@ -137,99 +234,95 @@ export default function Postular() {
         : [...prev.equipos_interes, equipo];
       return {
         ...prev,
-        equipos_interes: siguientes.length > 0 ? siguientes : ['Búsqueda y Rescate'],
+        equipos_interes:
+          siguientes.length > 0 ? siguientes : ['Búsqueda y Rescate'],
       };
     });
   };
 
-  const handleGoogleLogin = async () => {
-    setErrorMsg('');
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/postular`,
-      },
-    });
-    if (error) setErrorMsg('No se pudo conectar con Google: ' + error.message);
-  };
-
-  const handleSubmit = async (e) => {
+  const handleGuardarAntesDeVincular = async (e) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (esMenorDe16) {
-      setErrorMsg('La edad mínima de postulación institucional es de 16 años.');
-      return;
-    }
+    if (!formData.ya_es_voluntario) {
+      if (esMenorDe16) {
+        setErrorMsg(
+          'La edad mínima de postulación institucional es de 16 años.'
+        );
+        return;
+      }
 
-    if (
-      esMenorDeEdad &&
-      (!formData.autorizacion_parental_confirmada ||
-        !formData.nombre_apoderado.trim())
-    ) {
-      setErrorMsg(
-        'Los postulantes de 16 y 17 años deben contar con autorización expresa de sus padres o apoderados.'
-      );
-      return;
+      if (
+        esMenorDeEdad &&
+        (!formData.autorizacion_parental_confirmada ||
+          !formData.nombre_apoderado.trim())
+      ) {
+        setErrorMsg(
+          'Los postulantes de 16 y 17 años deben contar con autorización expresa de sus padres o apoderados.'
+        );
+        return;
+      }
     }
 
     setLoading(true);
     try {
       const rutLimpio = formatearRutChileno(formData.rut);
-      const digitosRut = rutLimpio.replace(/[^0-9]/g, '');
-      const codigoBre =
-        profile?.codigo_credencial ||
-        (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
-
-      const payloadPerfil = {
-        ya_es_voluntario: Boolean(formData.ya_es_voluntario),
-        nombre_completo: formData.nombre_completo.trim(),
+      const borradorConEstado = {
+        ...formData,
         rut: rutLimpio,
-        codigo_credencial: codigoBre,
-        fecha_nacimiento: formData.fecha_nacimiento || null,
-        telefono: formData.telefono.trim(),
-        region: formData.region,
-        comuna: formData.comuna.trim(),
-        experiencia_previa: Boolean(formData.experiencia_previa),
-        detalle_experiencia: formData.experiencia_previa
-          ? formData.detalle_experiencia.trim()
-          : '',
-        formacion_afines: Boolean(formData.formacion_afines),
-        detalle_formacion_cursos: formData.formacion_afines
-          ? formData.detalle_formacion_cursos.trim()
-          : '',
-        motivacion: formData.motivacion.trim(),
-        disp_entrenamientos: formData.disp_entrenamientos,
-        disp_emergencias_biobio: formData.disp_emergencias_biobio,
-        condicion_medica_terreno: Boolean(formData.condicion_medica_terreno),
-        detalle_condicion_medica: formData.condicion_medica_terreno
-          ? formData.detalle_condicion_medica.trim() || 'Especificado por postulante'
-          : 'Ninguna',
-        alergias: formData.condicion_medica_terreno
-          ? formData.detalle_condicion_medica.trim() || profile?.alergias || 'Ninguna'
-          : profile?.alergias || 'Ninguna',
-        equipos_interes: formData.equipos_interes,
-        especialidades_pendientes: formData.equipos_interes,
         es_menor_autorizado: esMenorDeEdad,
-        nombre_apoderado: esMenorDeEdad ? formData.nombre_apoderado.trim() : null,
-        telefono_apoderado: esMenorDeEdad
-          ? formData.telefono_apoderado.trim()
-          : null,
-        rol:
-          (profile?.rol || 'postulante').toLowerCase() === 'postulante'
-            ? 'postulante'
-            : profile.rol,
-        estado_validacion:
-          profile?.estado_validacion === 'aprobado' ? 'aprobado' : 'pendiente',
-        onboarding_completado: true,
       };
 
-      if (user) {
+      // Guardar en localStorage para no perder ningún dato al ir a Google OAuth o crear cuenta
+      localStorage.setItem(
+        STORAGE_KEY_PRE_POSTULACION,
+        JSON.stringify(borradorConEstado)
+      );
+
+      if (user?.id) {
+        const digitosRut = rutLimpio.replace(/[^0-9]/g, '');
+        const codigoBre =
+          profile?.codigo_credencial ||
+          (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
+
         const { error } = await supabase
           .from('perfiles')
           .update({
-            ...payloadPerfil,
+            ya_es_voluntario: Boolean(formData.ya_es_voluntario),
+            nombre_completo: formData.nombre_completo.trim(),
             email: user.email,
+            rut: rutLimpio,
+            codigo_credencial: codigoBre,
+            fecha_nacimiento: formData.fecha_nacimiento || null,
+            telefono: formData.telefono.trim(),
+            region: formData.region,
+            comuna: formData.comuna.trim(),
+            experiencia_previa: Boolean(formData.experiencia_previa),
+            detalle_experiencia: formData.experiencia_previa
+              ? formData.detalle_experiencia.trim()
+              : '',
+            formacion_afines: Boolean(formData.formacion_afines),
+            detalle_formacion_cursos: formData.formacion_afines
+              ? formData.detalle_formacion_cursos.trim()
+              : '',
+            motivacion: formData.motivacion.trim(),
+            disp_entrenamientos: formData.disp_entrenamientos,
+            disp_emergencias_biobio: formData.disp_emergencias_biobio,
+            condicion_medica_terreno: Boolean(formData.condicion_medica_terreno),
+            detalle_condicion_medica: formData.condicion_medica_terreno
+              ? formData.detalle_condicion_medica.trim() ||
+              'Especificado por postulante'
+              : 'Ninguna',
+            equipos_interes: formData.equipos_interes,
+            especialidades_pendientes: formData.equipos_interes,
+            es_menor_autorizado: esMenorDeEdad,
+            nombre_apoderado: esMenorDeEdad
+              ? formData.nombre_apoderado.trim()
+              : null,
+            telefono_apoderado: esMenorDeEdad
+              ? formData.telefono_apoderado.trim()
+              : null,
+            onboarding_completado: true,
           })
           .eq('id', user.id);
 
@@ -240,32 +333,90 @@ export default function Postular() {
             perfil_origen_id: user.id,
             tipo: 'antecedentes',
             titulo: formData.ya_es_voluntario
-              ? `Solicitud de acceso (Declara ya ser voluntario): ${formData.nombre_completo.trim()}`
-              : `Nueva ficha de postulación: ${formData.nombre_completo.trim()}`,
+              ? `Ficha guardada (Ya soy voluntario): ${formData.nombre_completo.trim()}`
+              : `Ficha de postulación guardada: ${formData.nombre_completo.trim()}`,
             detalle: `RUT: ${rutLimpio} · Comuna: ${formData.comuna} · Equipos: ${formData.equipos_interes.join(', ')}`,
             leida: false,
           },
         ]);
 
+        localStorage.removeItem(STORAGE_KEY_PRE_POSTULACION);
         if (refreshProfile) await refreshProfile();
-      } else {
-        const { error } = await supabase.from('postulaciones').insert([
-          {
-            ...payloadPerfil,
-            estado: 'pendiente',
-          },
-        ]);
-        if (error) throw error;
+        setEnviado(true);
+        return;
       }
 
-      setEnviado(true);
+      // Si aún no vincula cuenta, guardar respaldo en postulaciones y habilitar el paso de vincular Gmail / crear cuenta
+      await supabase.from('postulaciones').insert([
+        {
+          ya_es_voluntario: Boolean(formData.ya_es_voluntario),
+          nombre_completo: formData.nombre_completo.trim(),
+          rut: rutLimpio,
+          fecha_nacimiento: formData.fecha_nacimiento || null,
+          telefono: formData.telefono.trim(),
+          region: formData.region,
+          comuna: formData.comuna.trim(),
+          experiencia_previa: Boolean(formData.experiencia_previa),
+          detalle_experiencia: formData.experiencia_previa
+            ? formData.detalle_experiencia.trim()
+            : '',
+          formacion_afines: Boolean(formData.formacion_afines),
+          detalle_formacion_cursos: formData.formacion_afines
+            ? formData.detalle_formacion_cursos.trim()
+            : '',
+          motivacion: formData.motivacion.trim(),
+          disp_entrenamientos: formData.disp_entrenamientos,
+          disp_emergencias_biobio: formData.disp_emergencias_biobio,
+          condicion_medica_terreno: Boolean(formData.condicion_medica_terreno),
+          detalle_condicion_medica: formData.condicion_medica_terreno
+            ? formData.detalle_condicion_medica.trim() ||
+            'Especificado por postulante'
+            : 'Ninguna',
+          equipos_interes: formData.equipos_interes,
+          es_menor_autorizado: esMenorDeEdad,
+          nombre_apoderado: esMenorDeEdad
+            ? formData.nombre_apoderado.trim()
+            : null,
+          telefono_apoderado: esMenorDeEdad
+            ? formData.telefono_apoderado.trim()
+            : null,
+          estado: 'pendiente',
+        },
+      ]);
+
+      setPasoVinculacionListo(true);
     } catch (err) {
       setErrorMsg(
-        err.message || 'Ocurrió un error al guardar la información de postulación.'
+        err.message ||
+        'No se pudo guardar la información antes de vincular la cuenta.'
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVincularGoogle = async () => {
+    setErrorMsg('');
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_PRE_POSTULACION,
+        JSON.stringify({
+          ...formData,
+          rut: formatearRutChileno(formData.rut),
+          es_menor_autorizado: esMenorDeEdad,
+        })
+      );
+    } catch {
+      // Ignorar error de almacenamiento
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/postular`,
+      },
+    });
+    if (error) setErrorMsg('No se pudo conectar con Google: ' + error.message);
   };
 
   if (enviado) {
@@ -280,39 +431,92 @@ export default function Postular() {
 
           <div className="space-y-2">
             <span className="inline-block rounded-lg bg-[#0A0A0A] px-3.5 py-1 text-xs font-black uppercase tracking-widest text-[#F2B632]">
-              Ficha Guardada · En Revisión de Directorio
+              Información Vinculada · En Espera de Validación
             </span>
             <h1 className="text-2xl font-black uppercase tracking-tight text-[#0A0A0A] sm:text-3xl">
-              Solicitud Registrada en el Sistema
+              Postulación Registrada y Vinculada
             </h1>
           </div>
 
           <p className="text-sm font-semibold leading-relaxed text-neutral-700">
-            Tu información quedó guardada directamente en la ficha de{' '}
-            <strong>Postulantes / Directorio</strong> de{' '}
-            <strong>O.N.G. BRE BÍO-BÍO</strong> para su validación institucional.
+            Tu información de postulación quedó vinculada a tu cuenta y
+            disponible en la ficha de <strong>Postulantes / Directorio</strong>{' '}
+            para su validación.
           </p>
 
           <div className="space-y-1.5 rounded-2xl border border-neutral-200 bg-neutral-100 p-4 text-left text-xs font-bold text-neutral-700">
             <p className="flex items-center gap-2 font-black uppercase text-[#0A0A0A]">
-              <Lock size={14} className="text-[#D90429]" /> Resumen Guardado
+              <Lock size={14} className="text-[#D90429]" /> Resumen Vinculado
             </p>
             <p>Nombre: {formData.nombre_completo}</p>
             <p>RUT: {formatearRutChileno(formData.rut)}</p>
             <p>
-              Condición declarada:{' '}
+              Estado declarado:{' '}
               {formData.ya_es_voluntario ? 'Ya soy voluntario' : 'Postulante'}
             </p>
-            <p>Equipos: {formData.equipos_interes.join(' · ')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Paso 2 (solo aparece después de guardar la información o marcar "Ya soy voluntario")
+  if (!user && pasoVinculacionListo) {
+    return (
+      <div className="min-h-screen bg-neutral-50 px-4 py-14 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-2xl space-y-6 rounded-3xl border border-neutral-200 bg-white p-8 shadow-xl">
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-950">
+            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
+            <span>
+              Tu información de postulación está guardada y respaldada. Ahora
+              vincula tu cuenta Gmail o crea tu cuenta para asociarla a tu
+              acceso.
+            </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setEnviado(false)}
-            className="rounded-xl border border-neutral-300 bg-white px-5 py-2.5 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
-          >
-            Revisar o Editar Información Guardada
-          </button>
+          <div className="space-y-1.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-xs font-bold text-neutral-800">
+            <p className="text-[11px] font-black uppercase text-[#D90429]">
+              Datos Guardados listos para vincular:
+            </p>
+            <p>
+              {formData.nombre_completo || 'Sin nombre'} ·{' '}
+              {formatearRutChileno(formData.rut) || 'Sin RUT'}
+            </p>
+            <p>
+              {formData.ya_es_voluntario
+                ? 'Marcado como: Ya soy voluntario'
+                : `Comuna: ${formData.comuna} · Equipos: ${formData.equipos_interes.join(', ')}`}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleVincularGoogle}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-neutral-800"
+            >
+              <UserPlus size={16} className="text-[#F2B632]" />
+              <span>Vincular con Gmail</span>
+            </button>
+
+            <Link
+              to="/registro"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#F01436] via-[#D90429] to-[#A3001B] px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:brightness-110"
+            >
+              <span>Crear Cuenta con Correo</span>
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div className="pt-2 text-center">
+            <button
+              type="button"
+              onClick={() => setPasoVinculacionListo(false)}
+              className="inline-flex items-center gap-1.5 text-xs font-black uppercase text-neutral-600 hover:text-neutral-950"
+            >
+              <Edit3 size={14} /> Volver a editar información de postulación
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -323,50 +527,20 @@ export default function Postular() {
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="rounded-3xl bg-gradient-to-r from-[#D90429] via-[#B8001F] to-[#0A0A0A] p-8 text-white shadow-[0_20px_45px_-12px_rgba(217,4,41,0.35)]">
           <span className="inline-block rounded-lg bg-[#F2B632] px-3 py-1 text-xs font-black uppercase tracking-widest text-[#0A0A0A]">
-            Acceso y Ficha de Postulación · ONG BRE BÍO-BÍO
+            Paso 1: Información de Postulación · ONG BRE BÍO-BÍO
           </span>
           <h1 className="mt-3 text-3xl font-black uppercase tracking-tight sm:text-4xl">
-            Postulación y Solicitud de Acceso
+            Ficha de Postulación y Acceso
           </h1>
           <p className="mt-2 text-sm font-semibold text-white/90">
-            Completa tu ficha directamente en la plataforma para que quede
-            disponible en el Directorio y Postulantes. Si ya formas parte del
-            cuerpo, marca la opción correspondiente.
+            Primero completa tu información de postulación (o marca que ya eres
+            voluntario). Luego podrás vincular tu Gmail o crear tu cuenta sin
+            perder tus datos.
           </p>
         </div>
 
-        {!user ? (
-          <div className="flex flex-col items-center justify-between gap-4 rounded-3xl border border-neutral-200 bg-white p-6 shadow-lg sm:flex-row">
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wide text-[#0A0A0A]">
-                Vincula tu cuenta Gmail para crear tu perfil
-              </h2>
-              <p className="mt-0.5 text-xs font-semibold text-neutral-600">
-                Al conectar tu correo, tus antecedentes quedarán asociados a tu
-                ficha para revisión del Directorio.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="inline-flex shrink-0 items-center gap-2.5 rounded-2xl bg-[#0A0A0A] px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md transition-all hover:bg-neutral-800"
-            >
-              <UserPlus size={16} className="text-[#F2B632]" />
-              <span>Continuar con Gmail</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-950">
-            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
-            <span>
-              Cuenta conectada: <strong>{user.email}</strong>. Completa los
-              datos de tu ficha de postulación.
-            </span>
-          </div>
-        )}
-
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleGuardarAntesDeVincular}
           className="space-y-6 rounded-3xl border border-neutral-200 bg-white p-6 shadow-[0_20px_50px_-15px_rgba(15,23,42,0.12)] sm:p-10"
         >
           {errorMsg && (
@@ -379,15 +553,18 @@ export default function Postular() {
             </div>
           )}
 
-          {/* Opción: Ya soy voluntario */}
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border-2 border-[#0A0A0A] bg-amber-50/70 p-4">
+          {/* Opción bien visible: Ya soy voluntario */}
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border-2 border-[#D90429] bg-amber-50 p-4 shadow-sm">
             <div>
-              <span className="block text-xs font-black uppercase tracking-wider text-[#0A0A0A]">
+              <span className="inline-block rounded bg-[#0A0A0A] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#F2B632]">
+                Miembros Actuales
+              </span>
+              <span className="mt-1 block text-sm font-black uppercase text-[#0A0A0A]">
                 Ya soy voluntario de ONG BRE Bío-Bío
               </span>
-              <span className="block text-xs font-semibold text-neutral-600">
-                Marca esta casilla si ya perteneces a la institución y estás
-                registrando o actualizando tu ficha de acceso.
+              <span className="block text-xs font-semibold text-neutral-700">
+                Marca esta opción si ya perteneces a la institución y deseas
+                pasar directo a vincular tu acceso o registrar tu ficha.
               </span>
             </div>
             <input
@@ -396,7 +573,7 @@ export default function Postular() {
               onChange={(e) =>
                 setFormData({ ...formData, ya_es_voluntario: e.target.checked })
               }
-              className="h-5 w-5 rounded border-neutral-400 text-[#D90429]"
+              className="h-6 w-6 shrink-0 rounded border-neutral-400 text-[#D90429]"
             />
           </label>
 
@@ -408,7 +585,7 @@ export default function Postular() {
               </label>
               <input
                 type="text"
-                required
+                required={!formData.ya_es_voluntario}
                 value={formData.nombre_completo}
                 onChange={(e) =>
                   setFormData({ ...formData, nombre_completo: e.target.value })
@@ -424,7 +601,7 @@ export default function Postular() {
               </label>
               <input
                 type="text"
-                required
+                required={!formData.ya_es_voluntario}
                 value={formData.rut}
                 onChange={(e) =>
                   setFormData({
@@ -443,7 +620,7 @@ export default function Postular() {
               </label>
               <input
                 type="date"
-                required
+                required={!formData.ya_es_voluntario}
                 value={formData.fecha_nacimiento}
                 onChange={(e) =>
                   setFormData({ ...formData, fecha_nacimiento: e.target.value })
@@ -458,7 +635,7 @@ export default function Postular() {
               </label>
               <input
                 type="tel"
-                required
+                required={!formData.ya_es_voluntario}
                 value={formData.telefono}
                 onChange={(e) =>
                   setFormData({ ...formData, telefono: e.target.value })
@@ -674,7 +851,7 @@ export default function Postular() {
               </label>
               <textarea
                 rows={3}
-                required
+                required={!formData.ya_es_voluntario}
                 value={formData.motivacion}
                 onChange={(e) =>
                   setFormData({ ...formData, motivacion: e.target.value })
@@ -803,8 +980,8 @@ export default function Postular() {
             <FileText size={18} strokeWidth={2.5} />
             <span>
               {loading
-                ? 'Guardando Ficha...'
-                : 'Guardar Información de Postulación'}
+                ? 'Guardando Información...'
+                : 'Guardar Información y Continuar a Vincular Cuenta'}
             </span>
           </button>
         </form>
