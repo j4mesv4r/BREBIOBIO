@@ -180,7 +180,8 @@ function dibujarTextoAjustadoEnArea(ctx, texto, x, y, w, h, tamanoInicial = 18) 
     }
 
     const totalHeight = lineas.length * altoLinea;
-    const startY = y + Math.max(altoLinea * 0.85, (h - totalHeight) / 2 + altoLinea * 0.75);
+    const startY =
+        y + Math.max(altoLinea * 0.85, (h - totalHeight) / 2 + altoLinea * 0.75);
 
     lineas.forEach((linea, idx) => {
         ctx.fillText(linea, x + 6, startY + idx * altoLinea, w - 12);
@@ -206,6 +207,7 @@ export default function MiPerfil() {
         contacto_emergencia_nombre: '',
         contacto_emergencia_telefono: '',
         disponible_operativo: true,
+        mostrar_antecedentes_publicos: true,
         foto_url: '',
         usando_avatar_generico: false,
     });
@@ -217,6 +219,7 @@ export default function MiPerfil() {
     const [nuevoCert, setNuevoCert] = useState({
         titulo_curso: '',
         institucion: 'SENAPRED',
+        especialidad_vinculada: ESPECIALIDADES_CATALOGO[0].nombre,
     });
     const [archivoCert, setArchivoCert] = useState(null);
     const [subiendoCert, setSubiendoCert] = useState(false);
@@ -238,13 +241,23 @@ export default function MiPerfil() {
     const comunasDisponibles =
         REGIONES_CHILE.find((r) => r.region === form.region)?.comunas || [];
 
+    const especialidadesValidadas = Array.isArray(
+        profile?.especialidades_validadas
+    )
+        ? profile.especialidades_validadas
+        : [];
+
     useEffect(() => {
         if (profile) {
-            const listaEsp = Array.isArray(profile.especialidades)
-                ? profile.especialidades
-                : profile.especialidad
-                    ? [profile.especialidad]
-                    : [];
+            const listaPendienteOPrevia = Array.isArray(
+                profile.especialidades_pendientes
+            )
+                ? profile.especialidades_pendientes
+                : Array.isArray(profile.especialidades)
+                    ? profile.especialidades
+                    : profile.especialidad
+                        ? [profile.especialidad]
+                        : [];
 
             setForm({
                 nombre_completo: profile.nombre_completo || '',
@@ -253,7 +266,7 @@ export default function MiPerfil() {
                 telefono: profile.telefono || '',
                 region: profile.region || 'Región del Biobío',
                 comuna: profile.comuna || 'Concepción',
-                especialidades: listaEsp,
+                especialidades: listaPendienteOPrevia,
                 tipo_sangre: profile.tipo_sangre || 'No especificado',
                 alergias: profile.alergias || '',
                 contacto_emergencia_nombre: profile.contacto_emergencia_nombre || '',
@@ -261,6 +274,10 @@ export default function MiPerfil() {
                 disponible_operativo:
                     profile.disponible_operativo !== undefined
                         ? Boolean(profile.disponible_operativo)
+                        : true,
+                mostrar_antecedentes_publicos:
+                    profile.mostrar_antecedentes_publicos !== undefined
+                        ? Boolean(profile.mostrar_antecedentes_publicos)
                         : true,
                 foto_url: profile.foto_url || '',
                 usando_avatar_generico: Boolean(profile.usando_avatar_generico),
@@ -474,22 +491,26 @@ export default function MiPerfil() {
         setSaving(true);
         try {
             const esGenerico = !form.foto_url;
-            const textoEspecialidadLegacy = form.especialidades.join(', ');
+            const digitosRut = form.rut.replace(/[^0-9]/g, '');
+            const codigoCredencialCalculado =
+                profile?.codigo_credencial ||
+                (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
 
             const payload = {
                 nombre_completo: form.nombre_completo.trim(),
                 rut: formatearRutChileno(form.rut),
+                codigo_credencial: codigoCredencialCalculado,
                 genero: form.genero,
                 telefono: form.telefono.trim(),
                 region: form.region,
                 comuna: form.comuna,
-                especialidad: textoEspecialidadLegacy,
-                especialidades: form.especialidades,
+                especialidades_pendientes: form.especialidades,
                 tipo_sangre: form.tipo_sangre,
                 alergias: form.alergias.trim() || 'Ninguna',
                 contacto_emergencia_nombre: form.contacto_emergencia_nombre.trim(),
                 contacto_emergencia_telefono: form.contacto_emergencia_telefono.trim(),
                 disponible_operativo: form.disponible_operativo,
+                mostrar_antecedentes_publicos: form.mostrar_antecedentes_publicos,
                 foto_url: esGenerico ? null : form.foto_url,
                 usando_avatar_generico: esGenerico,
                 fecha_inicio_avatar_generico: esGenerico
@@ -505,6 +526,18 @@ export default function MiPerfil() {
 
             if (error) throw error;
 
+            // Notificar al Directorio para validación de antecedentes y especialidades
+            await supabase.from('notificaciones_directorio').insert([
+                {
+                    perfil_origen_id: user.id,
+                    tipo: 'especialidad',
+                    titulo: `Revisión de antecedentes y especialidades: ${form.nombre_completo.trim()}`,
+                    detalle: `Especialidades ingresadas: ${form.especialidades.join(', ') || 'Ninguna'
+                        }`,
+                    leida: false,
+                },
+            ]);
+
             setForm((prev) => ({
                 ...prev,
                 usando_avatar_generico: esGenerico,
@@ -513,7 +546,8 @@ export default function MiPerfil() {
             if (refreshProfile) await refreshProfile();
             setStatus({
                 type: 'success',
-                message: 'Antecedentes guardados correctamente.',
+                message:
+                    'Antecedentes guardados. Las especialidades ingresadas fueron enviadas al Directorio para su validación.',
             });
         } catch (err) {
             setStatus({
@@ -549,6 +583,7 @@ export default function MiPerfil() {
                     perfil_id: user.id,
                     titulo_curso: nuevoCert.titulo_curso.trim(),
                     institucion: nuevoCert.institucion.trim() || 'SENAPRED',
+                    especialidad_vinculada: nuevoCert.especialidad_vinculada,
                     archivo_url: publicUrl,
                     estado_validacion: 'pendiente',
                 },
@@ -556,9 +591,29 @@ export default function MiPerfil() {
 
             if (dbErr) throw dbErr;
 
-            setNuevoCert({ titulo_curso: '', institucion: 'SENAPRED' });
+            await supabase.from('notificaciones_directorio').insert([
+                {
+                    perfil_origen_id: user.id,
+                    tipo: 'certificado',
+                    titulo: `Nuevo certificado por validar: ${nuevoCert.titulo_curso.trim()}`,
+                    detalle: `${form.nombre_completo || user.email
+                        } · Especialidad vinculada: ${nuevoCert.especialidad_vinculada}`,
+                    leida: false,
+                },
+            ]);
+
+            setNuevoCert({
+                titulo_curso: '',
+                institucion: 'SENAPRED',
+                especialidad_vinculada: ESPECIALIDADES_CATALOGO[0].nombre,
+            });
             setArchivoCert(null);
             cargarCertificados();
+            setStatus({
+                type: 'success',
+                message:
+                    'Certificado cargado y vinculado a especialidad. Se notificó al Directorio para validación.',
+            });
         } catch (err) {
             setStatus({
                 type: 'error',
@@ -597,7 +652,6 @@ export default function MiPerfil() {
         const renderizarAmbasCaras = async () => {
             const W = 1012;
 
-            // -------------------- 1. CARA FRONTAL --------------------
             const cFrente = canvasFrenteRef.current;
             const ctxF = cFrente.getContext('2d');
 
@@ -618,7 +672,6 @@ export default function MiPerfil() {
                 ctxF.drawImage(imgBaseFrente, 0, 0, W, HF);
             }
 
-            // Fotografía del voluntario exactamente en area-1 (3.55%, 7.97%, 33.75%, 69.80%)
             const avatarGenPng =
                 form.genero === 'femenino'
                     ? '/avatar-femenino.png'
@@ -637,7 +690,7 @@ export default function MiPerfil() {
                 const boxX = W * 0.0355;
                 const boxY = HF * 0.0797;
                 const boxW = W * 0.3375;
-                const boxH = HF * 0.6980;
+                const boxH = HF * 0.698;
 
                 ctxF.save();
                 ctxF.beginPath();
@@ -665,7 +718,6 @@ export default function MiPerfil() {
                 ctxF.restore();
             }
 
-            // Franja Roja
             const tituloFranjaRoja = resolverTituloFranjaCredencial(
                 profile,
                 form.genero
@@ -675,7 +727,6 @@ export default function MiPerfil() {
             ctxF.font = '900 42px sans-serif';
             ctxF.fillText(tituloFranjaRoja, 412, HF * 0.388, 430);
 
-            // Nombre Completo
             ctxF.fillStyle = '#111827';
             ctxF.font = '900 28px sans-serif';
             ctxF.fillText(
@@ -689,7 +740,6 @@ export default function MiPerfil() {
                 545
             );
 
-            // RUT Formateado
             ctxF.font = '900 26px sans-serif';
             ctxF.fillText(
                 formatearRutChileno(form.rut || profile?.rut) || '12.345.678-9',
@@ -697,12 +747,10 @@ export default function MiPerfil() {
                 HF * 0.655
             );
 
-            // Función / Área
             const funcionAreaTexto = resolverFuncionAreaCredencial(profile);
             ctxF.font = '900 22px sans-serif';
             ctxF.fillText(funcionAreaTexto, 420, HF * 0.787, 545);
 
-            // Barra Inferior Negra
             const codigoMostrar =
                 profile?.codigo_credencial ||
                 (form.rut
@@ -728,7 +776,6 @@ export default function MiPerfil() {
             ctxF.fillText(fmtFecha(fechaEmision), 395, HF * 0.922);
             ctxF.fillText(fmtFecha(fechaVigencia), 585, HF * 0.922);
 
-            // -------------------- 2. CARA TRASERA --------------------
             const cReverso = canvasReversoRef.current;
             const ctxR = cReverso.getContext('2d');
 
@@ -749,7 +796,6 @@ export default function MiPerfil() {
                 ctxR.drawImage(imgBaseReverso, 0, 0, W, HR);
             }
 
-            // Grupo Sanguíneo
             ctxR.fillStyle = '#FFFFFF';
             ctxR.textAlign = 'center';
             ctxR.font = '900 38px sans-serif';
@@ -759,17 +805,16 @@ export default function MiPerfil() {
                     : 'N/E';
             ctxR.fillText(gsTexto, 875, HR * 0.207);
 
-            // area-0: Especialidades (14.97%, 40.49%, 43.71%, 11.66%) sin límite de líneas
-            const textoEspReverso =
-                form.especialidades.length > 0
-                    ? form.especialidades.join(' · ').toUpperCase()
-                    : 'BÚSQUEDA Y RESCATE EN EMERGENCIAS';
+            const espParaCredencial =
+                especialidadesValidadas.length > 0
+                    ? especialidadesValidadas.join(' · ').toUpperCase()
+                    : 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
 
             ctxR.fillStyle = '#111827';
             ctxR.textAlign = 'left';
             dibujarTextoAjustadoEnArea(
                 ctxR,
-                textoEspReverso,
+                espParaCredencial,
                 W * 0.1497,
                 HR * 0.4049,
                 W * 0.4371,
@@ -777,7 +822,6 @@ export default function MiPerfil() {
                 17
             );
 
-            // area-1: Antecedentes Médicos - Alergias (15.26%, 62.43%, 34.82%, 13.35%) sin límite de líneas
             const textoAlergias = (
                 form.alergias || 'SIN ANTECEDENTES RELEVANTES'
             ).toUpperCase();
@@ -792,7 +836,6 @@ export default function MiPerfil() {
                 16
             );
 
-            // area-2: Código QR centrado (69.90%, 29.60%, 26.21%, 40.35%)
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
                 codigoMostrar
             )}`;
@@ -818,7 +861,7 @@ export default function MiPerfil() {
         };
 
         renderizarAmbasCaras();
-    }, [aprobado, profile, rol, form]);
+    }, [aprobado, profile, rol, form, especialidadesValidadas]);
 
     const descargarPNG = (lado) => {
         const canvas =
@@ -838,24 +881,30 @@ export default function MiPerfil() {
     const renderSelectorEspecialidades = () => (
         <div className="relative sm:col-span-2">
             <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                Especialidades Operativas y Administrativas (Espacio, Coma o Enter)
+                Especialidades Propuestas (Requieren Validación del Directorio)
             </label>
             <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 py-2 focus-within:border-[#0A0A0A]">
-                {form.especialidades.map((esp) => (
-                    <span
-                        key={esp}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-1 text-xs font-black text-[#F2B632]"
-                    >
-                        {esp}
-                        <button
-                            type="button"
-                            onClick={() => eliminarEspecialidadChip(esp)}
-                            className="rounded-full p-0.5 text-neutral-400 hover:bg-white/15 hover:text-white"
+                {form.especialidades.map((esp) => {
+                    const estaValidada = especialidadesValidadas.includes(esp);
+                    return (
+                        <span
+                            key={esp}
+                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-black ${estaValidada
+                                    ? 'bg-emerald-900 text-emerald-200'
+                                    : 'bg-[#0A0A0A] text-[#F2B632]'
+                                }`}
                         >
-                            <X size={12} strokeWidth={3} />
-                        </button>
-                    </span>
-                ))}
+                            {esp} {!estaValidada && '(Pendiente)'}
+                            <button
+                                type="button"
+                                onClick={() => eliminarEspecialidadChip(esp)}
+                                className="rounded-full p-0.5 text-neutral-400 hover:bg-white/15 hover:text-white"
+                            >
+                                <X size={12} strokeWidth={3} />
+                            </button>
+                        </span>
+                    );
+                })}
                 <input
                     type="text"
                     value={inputEsp}
@@ -866,11 +915,7 @@ export default function MiPerfil() {
                         setMostrarSugerencias(true);
                     }}
                     onKeyDown={handleKeyDownEspecialidad}
-                    placeholder={
-                        form.especialidades.length === 0
-                            ? 'Ej. USAR, Búsqueda Agreste, RPAS/Drone, Administración...'
-                            : 'Agregar otra especialidad...'
-                    }
+                    placeholder="Selecciona o escribe especialidad y presiona Enter..."
                     className="min-w-[180px] flex-1 bg-transparent text-sm font-semibold outline-none"
                 />
             </div>
@@ -1410,30 +1455,47 @@ export default function MiPerfil() {
                             </div>
                         </div>
 
-                        <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-xs font-black uppercase">
-                            <input
-                                type="checkbox"
-                                checked={form.disponible_operativo}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        disponible_operativo: e.target.checked,
-                                    })
-                                }
-                                className="h-4 w-4 rounded text-emerald-600"
-                            />
-                            <span
-                                className={
-                                    form.disponible_operativo
-                                        ? 'text-emerald-700'
-                                        : 'text-neutral-500'
-                                }
-                            >
-                                {form.disponible_operativo
-                                    ? 'Disponible para Llamado'
-                                    : 'No Disponible Temporalmente'}
-                            </span>
-                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-black uppercase">
+                                <input
+                                    type="checkbox"
+                                    checked={form.mostrar_antecedentes_publicos}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            mostrar_antecedentes_publicos: e.target.checked,
+                                        })
+                                    }
+                                    className="h-4 w-4 rounded text-[#D90429]"
+                                />
+                                <span>Antecedentes Visibles en QR</span>
+                            </label>
+
+                            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-black uppercase">
+                                <input
+                                    type="checkbox"
+                                    checked={form.disponible_operativo}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            disponible_operativo: e.target.checked,
+                                        })
+                                    }
+                                    className="h-4 w-4 rounded text-emerald-600"
+                                />
+                                <span
+                                    className={
+                                        form.disponible_operativo
+                                            ? 'text-emerald-700'
+                                            : 'text-neutral-500'
+                                    }
+                                >
+                                    {form.disponible_operativo
+                                        ? 'Disponible para Llamado'
+                                        : 'No Disponible'}
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1666,6 +1728,27 @@ export default function MiPerfil() {
                             placeholder="Institución (SENAPRED)"
                             className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
                         />
+                        <div>
+                            <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                                Especialidad Vinculada
+                            </label>
+                            <select
+                                value={nuevoCert.especialidad_vinculada}
+                                onChange={(e) =>
+                                    setNuevoCert({
+                                        ...nuevoCert,
+                                        especialidad_vinculada: e.target.value,
+                                    })
+                                }
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
+                            >
+                                {ESPECIALIDADES_CATALOGO.map((esp) => (
+                                    <option key={esp.nombre} value={esp.nombre}>
+                                        {esp.nombre}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <div className="flex items-center gap-2">
                             <input
                                 type="file"
@@ -1701,6 +1784,9 @@ export default function MiPerfil() {
                                         </p>
                                         <p className="text-[11px] text-neutral-500">
                                             {c.institucion}
+                                            {c.especialidad_vinculada
+                                                ? ` · ${c.especialidad_vinculada}`
+                                                : ''}
                                         </p>
                                     </div>
                                     <span
