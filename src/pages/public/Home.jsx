@@ -218,6 +218,7 @@ export default function Home() {
   const [codigoVerificacion, setCodigoVerificacion] = useState('');
   const navigate = useNavigate();
   const anioActual = new Date().getFullYear();
+  const [cfgWeb, setCfgWeb] = useState({});
 
   const [contadoresAnuales, setContadoresAnuales] = useState({
     busquedas: 14,
@@ -225,6 +226,22 @@ export default function Home() {
     emergencias: 19,
     simulacros: 8,
   });
+
+  useEffect(() => {
+    const cargarConfiguracionWeb = async () => {
+      const { data } = await supabase
+        .from('configuracion_sitio')
+        .select('contenidos_json')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (data?.contenidos_json) {
+        setCfgWeb(data.contenidos_json);
+      }
+    };
+
+    cargarConfiguracionWeb();
+  }, []);
 
   useEffect(() => {
     const cargarActividadAnual = async () => {
@@ -345,10 +362,10 @@ export default function Home() {
             <div className="space-y-6 text-center lg:col-span-7 lg:text-left">
               <div className="inline-flex flex-wrap items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-b from-[#22262E]/95 to-[#121418]/95 px-4 py-2 ring-1 ring-white/20 shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_12px_25px_-5px_rgba(0,0,0,0.6)] lg:justify-start">
                 <span className="rounded-lg bg-gradient-to-b from-[#F01436] to-[#B8001F] px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white">
-                  Personalidad Jurídica N° 374054
+                  {cfgWeb.home_badge || 'Personalidad Jurídica N° 374054'}
                 </span>
                 <span className="text-xs font-extrabold uppercase tracking-wide text-neutral-100">
-                  Corporación Ley N° 20.500 · San Pedro de la Paz, Biobío
+                  {cfgWeb.home_subbadge || 'Corporación Ley N° 20.500 · San Pedro de la Paz, Biobío'}
                 </span>
               </div>
 
@@ -357,18 +374,15 @@ export default function Home() {
                   Búsqueda · Rescate · Emergencia
                 </p>
                 <h1 className="text-4xl font-black uppercase leading-[1.03] tracking-tight text-white drop-shadow-[0_8px_24px_rgba(0,0,0,0.95)] sm:text-6xl xl:text-7xl">
-                  Preparados para responder,{' '}
+                  {cfgWeb.home_titulo || 'Preparados para responder,'}{' '}
                   <span className="mt-1 block text-[#F2B632] drop-shadow-[0_6px_18px_rgba(0,0,0,0.9)]">
-                    comprometidos con la vida.
+                    {cfgWeb.home_titulo_destacado || 'comprometidos con la vida.'}
                   </span>
                 </h1>
               </div>
 
               <p className="mx-auto max-w-2xl text-base font-semibold leading-relaxed text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] sm:text-lg lg:mx-0">
-                Cuerpo especializado de voluntariado táctico al servicio de la
-                comunidad. Operamos en estrecha colaboración con estamentos
-                públicos y privados en áreas urbanas, rurales y zonas agrestes de
-                difícil acceso.
+                {cfgWeb.home_descripcion || 'Cuerpo especializado de voluntariado táctico al servicio de la comunidad. Operamos en estrecha colaboración con estamentos públicos y privados en áreas urbanas, rurales y zonas agrestes de difícil acceso.'}
               </p>
 
               <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row lg:justify-start">

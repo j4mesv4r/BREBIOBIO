@@ -67,6 +67,7 @@ const FondoTopograficoInstitucion = () => (
 
 export default function SobreNosotros() {
   const [directorio, setDirectorio] = useState([]);
+  const [cfgWeb, setCfgWeb] = useState({});
   const [contacto, setContacto] = useState({
     nombre: '',
     email: '',
@@ -74,6 +75,22 @@ export default function SobreNosotros() {
     mensaje: '',
   });
   const [enviadoContacto, setEnviadoContacto] = useState(false);
+
+  useEffect(() => {
+    const cargarConfiguracionWeb = async () => {
+      const { data } = await supabase
+        .from('configuracion_sitio')
+        .select('contenidos_json')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (data?.contenidos_json) {
+        setCfgWeb(data.contenidos_json);
+      }
+    };
+
+    cargarConfiguracionWeb();
+  }, []);
 
   useEffect(() => {
     const cargarDirectorio = async () => {
@@ -168,11 +185,7 @@ export default function SobreNosotros() {
                 </h2>
               </div>
               <p className="text-sm font-semibold leading-relaxed text-neutral-200 sm:text-base">
-                Proteger y salvar vidas mediante la prevención, cuidado y
-                búsqueda de personas en situaciones de emergencia, en estrecha
-                colaboración con Estamentos Públicos y Privados, a través de la
-                implementación de programas de capacitación, respuesta rápida y
-                asistencia en desastres naturales.
+                {cfgWeb.institucion_mision || 'Proteger y salvar vidas mediante la prevención, cuidado y búsqueda de personas en situaciones de emergencia, en estrecha colaboración con Estamentos Públicos y Privados, a través de la implementación de programas de capacitación, respuesta rápida y asistencia en desastres naturales.'}
               </p>
             </div>
 
@@ -186,10 +199,7 @@ export default function SobreNosotros() {
                 </h2>
               </div>
               <p className="text-sm font-semibold leading-relaxed text-neutral-200 sm:text-base">
-                Ser líder en la respuesta a emergencias y desastres, reconocida
-                por su eficacia técnica, profesionalismo y compromiso con la
-                seguridad y bienestar de la comunidad, contribuyendo a construir
-                una sociedad más resiliente y preparada.
+                {cfgWeb.institucion_vision || 'Ser líder en la respuesta a emergencias y desastres, reconocida por su eficacia técnica, profesionalismo y compromiso con la seguridad y bienestar de la comunidad, contribuyendo a construir una sociedad más resiliente y preparada.'}
               </p>
             </div>
           </div>
@@ -307,8 +317,7 @@ export default function SobreNosotros() {
                 Donaciones
               </h2>
               <p className="mt-3 text-sm font-medium leading-relaxed text-neutral-300">
-                Respalda nuestras operaciones de búsqueda, rescate, botiquines
-                prehospitalarios, comunicaciones y capacitación de voluntarios.
+                {cfgWeb.institucion_donaciones_texto || 'Respalda nuestras operaciones de búsqueda, rescate, botiquines prehospitalarios, comunicaciones y capacitación de voluntarios.'}
               </p>
             </div>
 

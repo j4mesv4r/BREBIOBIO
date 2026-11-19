@@ -36,23 +36,39 @@ const FOTOS_DESPLIEGUES = [
   },
 ];
 
-// Reemplaza los IDs de video de YouTube por los videos reales de tu canal BRE Bío-Bío
-const VIDEOS_YOUTUBE = [
-  {
-    id: 'dQw4w9WgXcQ',
-    titulo: 'Despliegue Operativo y Búsqueda en Terreno · BRE Bío-Bío',
-  },
-  {
-    id: 'ysz5S6PUM-U',
-    titulo: 'Capacitación y Maniobras de Rescate · BRE Bío-Bío',
-  },
-];
-
 export default function Postular() {
   const { user, profile, setProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cfgWeb, setCfgWeb] = useState({});
+
+  const videosYoutube = [
+    {
+      id: cfgWeb.postular_youtube_1 || 'dQw4w9WgXcQ',
+      titulo: 'Despliegue Operativo y Búsqueda en Terreno · BRE Bío-Bío',
+    },
+    {
+      id: cfgWeb.postular_youtube_2 || 'ysz5S6PUM-U',
+      titulo: 'Capacitación y Maniobras de Rescate · BRE Bío-Bío',
+    },
+  ];
+
+  useEffect(() => {
+    const cargarConfiguracionWeb = async () => {
+      const { data } = await supabase
+        .from('configuracion_sitio')
+        .select('contenidos_json')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (data?.contenidos_json) {
+        setCfgWeb(data.contenidos_json);
+      }
+    };
+
+    cargarConfiguracionWeb();
+  }, []);
 
   const [formData, setFormData] = useState({
     nombre_completo: '',
@@ -264,9 +280,7 @@ export default function Postular() {
               Postulación de Voluntarios
             </h1>
             <p className="mt-3 max-w-2xl text-base font-semibold text-neutral-300">
-              Ingresa tus antecedentes básicos para iniciar el proceso de
-              admisión. Tu ficha quedará en espera de validación por el
-              Directorio antes de habilitar tu perfil operativo.
+              {cfgWeb.postular_subtitulo || 'Ingresa tus antecedentes básicos para iniciar el proceso de admisión. Tu ficha quedará en espera de validación por el Directorio antes de habilitar tu perfil operativo.'}
             </p>
           </div>
         </div>
@@ -287,10 +301,7 @@ export default function Postular() {
                 <li className="flex items-start gap-3">
                   <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-red-600" />
                   <span>
-                    Edad mínima de <strong>16 años</strong>. Postulantes de{' '}
-                    <strong>16 y 17 años</strong> requieren autorización expresa
-                    de padres o apoderados para labores administrativas u
-                    operativas seguras sin riesgo físico.
+                    {cfgWeb.postular_requisitos_edad || 'Edad mínima de 16 años. Postulantes de 16 y 17 años requieren autorización expresa de padres o apoderados para labores administrativas u operativas seguras sin riesgo físico.'}
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
@@ -652,7 +663,7 @@ export default function Postular() {
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {VIDEOS_YOUTUBE.map((vid) => (
+                {videosYoutube.map((vid) => (
                   <div
                     key={vid.id}
                     className="overflow-hidden rounded-2xl border-2 border-neutral-950 bg-neutral-950 text-white shadow-lg"
