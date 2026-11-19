@@ -22,6 +22,48 @@ function normalizarRutSinFormato(valor = '') {
   return valor.replace(/[^0-9kK]/g, '').toUpperCase();
 }
 
+function resolverFuncionAreaPublica(voluntario) {
+  const rol = (voluntario?.rol || 'voluntario').toLowerCase();
+  const cargos = Array.isArray(voluntario?.cargos_operativos)
+    ? voluntario.cargos_operativos.map((c) => String(c).toLowerCase())
+    : [];
+
+  const etiquetasCargo = {
+    tesorero: 'Tesorero',
+    secretario: 'Secretaría',
+    do: 'Dirección Operativa',
+    dos: 'Dirección Operativa',
+    jc: 'Jefe de Cuadrilla',
+    lem: 'Prehospitalario',
+    prehospitalario: 'Prehospitalario',
+    instructor: 'Instrucción',
+    operativo: 'Operativo',
+  };
+
+  const cargosMapeados = cargos.map((c) => etiquetasCargo[c]).filter(Boolean);
+  if (cargosMapeados.length > 0) {
+    return Array.from(new Set(cargosMapeados)).join(' · ');
+  }
+
+  if (rol === 'superadmin') {
+    return 'Operativo - Administrativo';
+  }
+
+  if (rol === 'director') {
+    return 'Directorio';
+  }
+
+  const funcionTexto = (voluntario?.funcion || '').trim();
+  if (
+    funcionTexto &&
+    !/superadmin|postulante|usuario/i.test(funcionTexto)
+  ) {
+    return funcionTexto;
+  }
+
+  return 'Búsqueda y Rescate';
+}
+
 export default function FichaVoluntarioPublica() {
   const { rut: identificador } = useParams();
   const [voluntario, setVoluntario] = useState(null);
@@ -53,7 +95,6 @@ export default function FichaVoluntarioPublica() {
         perfil = data;
       }
 
-      // Si se busca BRE-190825, intentar hacer match por los primeros 6 dígitos del RUT
       if (!perfil && /^BRE-/i.test(idLimpio)) {
         const prefijo = idLimpio.replace(/^BRE-/i, '').replace(/[^0-9]/g, '');
         if (prefijo.length >= 4) {
@@ -160,10 +201,11 @@ export default function FichaVoluntarioPublica() {
         : 'VOLUNTARIO'
       : (voluntario.rol || 'VOLUNTARIO').toUpperCase();
 
+  const funcionAreaTexto = resolverFuncionAreaPublica(voluntario);
+
   return (
     <div className="min-h-[80vh] bg-[#F3F4F6] px-4 py-10 font-sans">
       <div className="mx-auto max-w-4xl space-y-8">
-        {/* Credencial Oficial Institucional */}
         <div className="overflow-hidden rounded-xl border-2 border-[#17191D] bg-white shadow-[8px_8px_0px_0px_#17191D]">
           <div className="relative overflow-hidden border-b-4 border-[#F2B632] bg-[#17191D] px-6 py-5 text-white">
             <div className="absolute -right-8 -top-8 h-36 w-52 -skew-x-12 bg-[#C8202F]" />
@@ -240,12 +282,7 @@ export default function FichaVoluntarioPublica() {
                 </h2>
                 <p className="mt-1 flex items-center gap-2 text-sm font-extrabold text-neutral-700">
                   <Compass size={16} className="text-[#C8202F]" />
-                  <span>
-                    {voluntario.funcion ||
-                      ((voluntario.rol || '').toLowerCase() === 'superadmin'
-                        ? 'Operativo - Administrativo'
-                        : 'Búsqueda y Rescate')}
-                  </span>
+                  <span>{funcionAreaTexto}</span>
                 </p>
               </div>
 
@@ -337,7 +374,7 @@ export default function FichaVoluntarioPublica() {
           )}
         </div>
 
-        {/* Cursos y Certificaciones (Botones para Visualizar en Línea y Descargar) */}
+        {/* Cursos y Certificaciones */}
         <div className="rounded-xl border-2 border-[#17191D] bg-white p-6 shadow-[6px_6px_0px_0px_#17191D] md:p-8">
           <h3 className="mb-5 flex items-center gap-2 text-lg font-black uppercase text-[#17191D]">
             <ShieldCheck className="text-[#C8202F]" size={22} />
