@@ -18,6 +18,11 @@ import {
   HeartPulse,
   MapPin,
   Bell,
+  UserPlus,
+  Trash2,
+  Link2,
+  Unlink,
+  KeyRound,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -103,6 +108,16 @@ export default function GestionDirectorio() {
   const [alerta, setAlerta] = useState('');
   const [panelAbiertoId, setPanelAbiertoId] = useState(null);
   const [subiendoFotoId, setSubiendoFotoId] = useState(null);
+  const [showNuevoPerfil, setShowNuevoPerfil] = useState(false);
+  const [creandoPerfil, setCreandoPerfil] = useState(false);
+  const [nuevoPerfil, setNuevoPerfil] = useState({
+    nombre_completo: '',
+    email: '',
+    rut: '',
+    rol: 'postulante',
+  });
+  const [claveInputs, setClaveInputs] = useState({});
+  const [infoExito, setInfoExito] = useState('');
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -205,6 +220,138 @@ export default function GestionDirectorio() {
       prev.map((p) =>
         p.id === perfilId ? { ...p, fecha_vigencia_credencial: valor } : p
       )
+    );
+  };
+
+  const handleCrearPerfil = async (e) => {
+    e.preventDefault();
+    if (!nuevoPerfil.nombre_completo.trim()) return;
+    setCreandoPerfil(true);
+    setAlerta('');
+    setInfoExito('');
+
+    const nuevoRegistro = {
+      id: crypto.randomUUID(),
+      nombre_completo: nuevoPerfil.nombre_completo.trim(),
+      email: nuevoPerfil.email.trim() || null,
+      rut: nuevoPerfil.rut.trim() || null,
+      rol: nuevoPerfil.rol || 'postulante',
+      estado_validacion: 'pendiente',
+      cuenta_vinculada: false,
+    };
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .insert([nuevoRegistro])
+      .select()
+      .single();
+
+    setCreandoPerfil(false);
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setPerfiles((prev) => [data || nuevoRegistro, ...prev]);
+    setNuevoPerfil({ nombre_completo: '', email: '', rut: '', rol: 'postulante' });
+    setShowNuevoPerfil(false);
+    setInfoExito(`Perfil creado para ${nuevoRegistro.nombre_completo}.`);
+  };
+
+  const eliminarPerfil = async (perfil) => {
+    if ((perfil?.rol || '').toLowerCase() === 'superadmin') {
+      setAlerta('No está permitido eliminar un perfil con rol Superadmin.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Eliminar el perfil de ${perfil.nombre_completo || 'este usuario'}?`
+      )
+    ) {
+      return;
+    }
+
+    setAlerta('');
+    setInfoExito('');
+    const { error } = await supabase
+      .from('perfiles')
+      .delete()
+      .eq('id', perfil.id);
+
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setPerfiles((prev) => prev.filter((p) => p.id !== perfil.id));
+    setInfoExito(`Perfil de ${perfil.nombre_completo || 'usuario'} eliminado.`);
+  };
+
+  const toggleVinculacionCuenta = async (perfil) => {
+    setAlerta('');
+    setInfoExito('');
+    const nuevoEstado = !Boolean(perfil.cuenta_vinculada);
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ cuenta_vinculada: nuevoEstado })
+      .eq('id', perfil.id);
+
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setPerfiles((prev) =>
+      prev.map((p) =>
+        p.id === perfil.id ? { ...p, cuenta_vinculada: nuevoEstado } : p
+      )
+    );
+    setInfoExito(
+      nuevoEstado
+        ? `Cuenta marcada como vinculada para ${perfil.nombre_completo || 'el perfil'}.`
+        : `Cuenta desvinculada para ${perfil.nombre_completo || 'el perfil'}. Todos sus antecedentes se conservan intactos.`
+    );
+  };
+
+  const asignarClaveProvisoria = async (perfil, generarAutomatica = false) => {
+    if (!esSA) return;
+    setAlerta('');
+    setInfoExito('');
+
+    const claveManual = (claveInputs[perfil.id] || '').trim();
+    const claveFinal =
+      generarAutomatica || !claveManual
+        ? `BRE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+        : claveManual;
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update({
+        clave_provisoria: claveFinal,
+        requiere_cambio_clave: true,
+      })
+      .eq('id', perfil.id);
+
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setPerfiles((prev) =>
+      prev.map((p) =>
+        p.id === perfil.id
+          ? {
+              ...p,
+              clave_provisoria: claveFinal,
+              requiere_cambio_clave: true,
+            }
+          : p
+      )
+    );
+    setClaveInputs((prev) => ({ ...prev, [perfil.id]: claveFinal }));
+    setInfoExito(
+      `Clave provisoria asignada a ${perfil.nombre_completo || perfil.email}: ${claveFinal} (requiere cambio al ingresar).`
     );
   };
 
@@ -726,6 +873,36 @@ export default function GestionDirectorio() {
 
             <button
               type="button"
+              onClick={() => toggleVinculacionCuenta(m)}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black uppercase ${
+                m.cuenta_vinculada
+                  ? 'border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100'
+                  : 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+              }`}
+            >
+              {m.cuenta_vinculada ? (
+                <>
+                  <Unlink size={14} /> Desvincular Cuenta
+                </>
+              ) : (
+                <>
+                  <Link2 size={14} /> Vincular Cuenta
+                </>
+              )}
+            </button>
+
+            {rolObjetivo !== 'superadmin' && (
+              <button
+                type="button"
+                onClick={() => eliminarPerfil(m)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black uppercase text-[#D90429] hover:bg-red-100"
+              >
+                <Trash2 size={14} /> Eliminar
+              </button>
+            )}
+
+            <button
+              type="button"
               onClick={() => setPanelAbiertoId(expandido ? null : m.id)}
               className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
             >
@@ -1013,6 +1190,53 @@ export default function GestionDirectorio() {
                     </label>
                   </div>
                 </div>
+
+                {!(m.email || '').toLowerCase().endsWith('@gmail.com') && (
+                  <div className="mt-4 border-t border-neutral-200 pt-4">
+                    <h5 className="mb-2 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
+                      <KeyRound size={14} className="text-[#D90429]" />
+                      Clave Provisoria para Correo Externo (Exclusivo Superadmin)
+                    </h5>
+                    <p className="mb-2.5 text-[11px] font-semibold text-neutral-600">
+                      Correo: <strong>{m.email || 'Sin correo'}</strong> ·{' '}
+                      {m.requiere_cambio_clave
+                        ? `Requiere cambio de clave (actual: ${m.clave_provisoria || 'asignada'})`
+                        : 'Sin clave provisoria pendiente'}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={
+                          claveInputs[m.id] !== undefined
+                            ? claveInputs[m.id]
+                            : m.clave_provisoria || ''
+                        }
+                        onChange={(e) =>
+                          setClaveInputs((prev) => ({
+                            ...prev,
+                            [m.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Escribe clave o genera una"
+                        className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold text-neutral-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => asignarClaveProvisoria(m, false)}
+                        className="rounded-lg bg-[#0A0A0A] px-3 py-1.5 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800"
+                      >
+                        Asignar Clave
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => asignarClaveProvisoria(m, true)}
+                        className="rounded-lg bg-[#D90429] px-3 py-1.5 text-xs font-black uppercase text-white hover:bg-red-700"
+                      >
+                        Generar Automática
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1054,6 +1278,13 @@ export default function GestionDirectorio() {
             className="shrink-0 text-[#D90429]"
           />
           <span>{alerta}</span>
+        </div>
+      )}
+
+      {infoExito && (
+        <div className="mb-6 flex items-center gap-2.5 rounded-xl border-l-4 border-emerald-600 bg-emerald-50 p-4 text-xs font-bold text-emerald-900">
+          <CheckCircle size={18} strokeWidth={2.5} className="shrink-0 text-emerald-600" />
+          <span>{infoExito}</span>
         </div>
       )}
 
@@ -1133,7 +1364,71 @@ export default function GestionDirectorio() {
         >
           Solicitudes de Apoyo ({solicitudes.length})
         </button>
+
+        <button
+          type="button"
+          onClick={() => setShowNuevoPerfil((prev) => !prev)}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
+        >
+          <UserPlus size={14} />
+          <span>Agregar Perfil</span>
+        </button>
       </div>
+
+      {showNuevoPerfil && (
+        <form
+          onSubmit={handleCrearPerfil}
+          className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:grid-cols-5"
+        >
+          <input
+            type="text"
+            required
+            value={nuevoPerfil.nombre_completo}
+            onChange={(e) =>
+              setNuevoPerfil({ ...nuevoPerfil, nombre_completo: e.target.value })
+            }
+            placeholder="Nombre completo *"
+            className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold sm:col-span-2"
+          />
+          <input
+            type="email"
+            value={nuevoPerfil.email}
+            onChange={(e) =>
+              setNuevoPerfil({ ...nuevoPerfil, email: e.target.value })
+            }
+            placeholder="Correo electrónico"
+            className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+          />
+          <input
+            type="text"
+            value={nuevoPerfil.rut}
+            onChange={(e) =>
+              setNuevoPerfil({ ...nuevoPerfil, rut: e.target.value })
+            }
+            placeholder="RUT (12.345.678-9)"
+            className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+          />
+          <div className="flex gap-2">
+            <select
+              value={nuevoPerfil.rol}
+              onChange={(e) =>
+                setNuevoPerfil({ ...nuevoPerfil, rol: e.target.value })
+              }
+              className="w-full rounded-xl border border-neutral-300 bg-white px-2.5 py-2 text-xs font-bold uppercase"
+            >
+              <option value="postulante">Postulante</option>
+              <option value="voluntario">Voluntario</option>
+            </select>
+            <button
+              type="submit"
+              disabled={creandoPerfil}
+              className="shrink-0 rounded-xl bg-[#D90429] px-4 py-2 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {creandoPerfil ? '...' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {loading ? (
         <p className="py-10 text-center text-sm font-bold text-neutral-500">

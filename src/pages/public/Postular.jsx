@@ -165,6 +165,7 @@ export default function Postular() {
         estado_validacion:
           profile?.estado_validacion === 'aprobado' ? 'aprobado' : 'pendiente',
         onboarding_completado: true,
+        cuenta_vinculada: true,
       };
 
       setLoading(true);
@@ -323,6 +324,7 @@ export default function Postular() {
               ? formData.telefono_apoderado.trim()
               : null,
             onboarding_completado: true,
+            cuenta_vinculada: true,
           })
           .eq('id', user.id);
 
@@ -468,9 +470,9 @@ export default function Postular() {
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-950">
             <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
             <span>
-              Tu información de postulación está guardada y respaldada. Ahora
-              vincula tu cuenta Gmail o crea tu cuenta para asociarla a tu
-              acceso.
+              {formData.ya_es_voluntario
+                ? 'Modo miembro activo habilitado. Elige cómo deseas vincular tu cuenta (correo institucional/personal o Google).'
+                : 'Tu información de postulación está guardada y respaldada. Ahora elige una cuenta para vincularla a tu ficha.'}
             </span>
           </div>
 
@@ -490,22 +492,36 @@ export default function Postular() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              to="/registro"
+              onClick={() => {
+                try {
+                  localStorage.setItem(
+                    STORAGE_KEY_PRE_POSTULACION,
+                    JSON.stringify({
+                      ...formData,
+                      rut: formatearRutChileno(formData.rut),
+                      es_menor_autorizado: esMenorDeEdad,
+                    })
+                  );
+                } catch {
+                  // Ignorar error de almacenamiento
+                }
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#F01436] via-[#D90429] to-[#A3001B] px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:brightness-110"
+            >
+              <span>Crear cuenta con correo y contraseña</span>
+              <ArrowRight size={16} />
+            </Link>
+
             <button
               type="button"
               onClick={handleVincularGoogle}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-neutral-800"
             >
               <UserPlus size={16} className="text-[#F2B632]" />
-              <span>Vincular con Gmail</span>
+              <span>Vincular con Google</span>
             </button>
-
-            <Link
-              to="/registro"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#F01436] via-[#D90429] to-[#A3001B] px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:brightness-110"
-            >
-              <span>Crear Cuenta con Correo</span>
-              <ArrowRight size={16} />
-            </Link>
           </div>
 
           <div className="pt-2 text-center">
@@ -570,9 +586,26 @@ export default function Postular() {
             <input
               type="checkbox"
               checked={formData.ya_es_voluntario}
-              onChange={(e) =>
-                setFormData({ ...formData, ya_es_voluntario: e.target.checked })
-              }
+              onChange={(e) => {
+                const marcado = e.target.checked;
+                const actualizado = { ...formData, ya_es_voluntario: marcado };
+                setFormData(actualizado);
+                if (marcado && !user) {
+                  try {
+                    localStorage.setItem(
+                      STORAGE_KEY_PRE_POSTULACION,
+                      JSON.stringify({
+                        ...actualizado,
+                        rut: formatearRutChileno(actualizado.rut),
+                        es_menor_autorizado: false,
+                      })
+                    );
+                  } catch {
+                    // Ignorar error de almacenamiento
+                  }
+                  setPasoVinculacionListo(true);
+                }
+              }}
               className="h-6 w-6 shrink-0 rounded border-neutral-400 text-[#D90429]"
             />
           </label>
