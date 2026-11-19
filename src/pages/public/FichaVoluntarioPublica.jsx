@@ -190,7 +190,11 @@ export default function FichaVoluntarioPublica() {
       : 'Vigente';
 
   const fechaVigencia = voluntario.fecha_vigencia_credencial
-    ? new Date(voluntario.fecha_vigencia_credencial).toLocaleDateString('es-CL')
+    ? new Date(
+        String(voluntario.fecha_vigencia_credencial).length === 10
+          ? `${voluntario.fecha_vigencia_credencial}T12:00:00`
+          : voluntario.fecha_vigencia_credencial
+      ).toLocaleDateString('es-CL')
     : 'Vigente · Anual';
 
   const esActivo =

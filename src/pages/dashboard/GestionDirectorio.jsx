@@ -189,6 +189,25 @@ export default function GestionDirectorio() {
     }
   };
 
+  const actualizarVigenciaCredencial = async (perfilId, nuevaFecha) => {
+    const valor = nuevaFecha || null;
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ fecha_vigencia_credencial: valor })
+      .eq('id', perfilId);
+
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setPerfiles((prev) =>
+      prev.map((p) =>
+        p.id === perfilId ? { ...p, fecha_vigencia_credencial: valor } : p
+      )
+    );
+  };
+
   const validarCertificado = async (cert, estado) => {
     const certId = typeof cert === 'object' ? cert.id : cert;
     const certObj =
@@ -761,6 +780,35 @@ export default function GestionDirectorio() {
                     {m.contacto_emergencia_nombre || 'N/R'} (
                     {m.contacto_emergencia_telefono || 'N/R'})
                   </span>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 sm:col-span-3">
+                  <span className="block text-[10px] font-black uppercase text-neutral-500">
+                    Vigencia de Credencial (Opcional)
+                  </span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={
+                        m.fecha_vigencia_credencial
+                          ? String(m.fecha_vigencia_credencial).slice(0, 10)
+                          : ''
+                      }
+                      onChange={(e) =>
+                        actualizarVigenciaCredencial(m.id, e.target.value)
+                      }
+                      className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-900"
+                    />
+                    {m.fecha_vigencia_credencial && (
+                      <button
+                        type="button"
+                        onClick={() => actualizarVigenciaCredencial(m.id, null)}
+                        className="rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-1.5 text-[11px] font-black uppercase text-neutral-700 hover:bg-neutral-200"
+                      >
+                        Restablecer
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="rounded-lg border border-neutral-200 bg-white p-3 sm:col-span-3">

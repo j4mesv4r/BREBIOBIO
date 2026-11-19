@@ -870,8 +870,15 @@ export default function MiPerfil() {
             const fechaEmision = profile?.creado_en
                 ? new Date(profile.creado_en)
                 : new Date();
-            const fechaVigencia = new Date(fechaEmision);
-            fechaVigencia.setFullYear(fechaVigencia.getFullYear() + 2);
+            let fechaVigencia;
+            if (profile?.fecha_vigencia_credencial) {
+                fechaVigencia = new Date(
+                    `${String(profile.fecha_vigencia_credencial).slice(0, 10)}T12:00:00`
+                );
+            } else {
+                fechaVigencia = new Date(fechaEmision);
+                fechaVigencia.setFullYear(fechaVigencia.getFullYear() + 2);
+            }
 
             const fmtFecha = (d) =>
                 `${String(d.getDate()).padStart(2, '0')}-${String(
