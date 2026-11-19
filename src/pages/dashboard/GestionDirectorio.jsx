@@ -8,6 +8,7 @@ import {
   Lock,
   AlertTriangle,
   Eye,
+  EyeOff,
   Award,
   BadgeCheck,
   Camera,
@@ -16,6 +17,7 @@ import {
   PhoneCall,
   HeartPulse,
   MapPin,
+  Bell,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -96,6 +98,7 @@ export default function GestionDirectorio() {
   const [certificados, setCertificados] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
   const [perfiles, setPerfiles] = useState([]);
+  const [notificaciones, setNotificaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [alerta, setAlerta] = useState('');
   const [panelAbiertoId, setPanelAbiertoId] = useState(null);
@@ -125,7 +128,7 @@ export default function GestionDirectorio() {
   const cargarDatos = async () => {
     setLoading(true);
     setAlerta('');
-    const [certsRes, solRes, perfRes] = await Promise.all([
+    const [certsRes, solRes, perfRes, notifRes] = await Promise.all([
       supabase
         .from('certificados')
         .select('*, perfiles(id, nombre_completo, rut, rol, cargos_operativos)')
@@ -138,6 +141,11 @@ export default function GestionDirectorio() {
         .from('perfiles')
         .select('*')
         .order('nombre_completo', { ascending: true }),
+      supabase
+        .from('notificaciones_directorio')
+        .select('*')
+        .order('creado_en', { ascending: false })
+        .limit(25),
     ]);
 
     if (!certsRes.error && certsRes.data) setCertificados(certsRes.data);
@@ -147,6 +155,9 @@ export default function GestionDirectorio() {
     } else if (perfRes.error) {
       setAlerta(`Error cargando perfiles: ${perfRes.error.message}`);
     }
+    if (!notifRes.error && notifRes.data) {
+      setNotificaciones(notifRes.data);
+    }
     setLoading(false);
   };
 
@@ -154,7 +165,6 @@ export default function GestionDirectorio() {
     cargarDatos();
   }, []);
 
-  // Separación estricta entre Miembros Activos y Postulantes
   const listaMiembros = perfiles.filter(
     (p) => (p.rol || 'postulante').toLowerCase() !== 'postulante'
   );
@@ -164,14 +174,152 @@ export default function GestionDirectorio() {
   const postulantesPendientes = listaPostulantes.filter(
     (p) => (p.estado_validacion || 'pendiente') === 'pendiente'
   );
+  const alertasSinLeer = notificaciones.filter((n) => !n.leida);
 
-  const validarCertificado = async (id, estado) => {
+  const marcarNotificacionLeida = async (id) => {
+    const { error } = await supabase
+      .from('notificaciones_directorio')
+      .update({ leida: true })
+      .eq('id', id);
+
+    if (!error) {
+      setNotificaciones((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, leida: true } : n))
+      );
+    }
+  };
+
+  const validarCertificado = async (cert, estado) => {
+    const certId = typeof cert === 'object' ? cert.id : cert;
+    const certObj =
+      typeof cert === 'object'
+        ? cert
+        : certificados.find((c) => c.id === certId);
+
     const { error } = await supabase
       .from('certificados')
       .update({ estado_validacion: estado })
-      .eq('id', id);
+      .eq('id', certId);
 
-    if (!error) cargarDatos();
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    if (estado === 'aprobado' && certObj?.especialidad_vinculada) {
+      const dueno = perfiles.find((p) => p.id === certObj.perfil_id);
+      if (dueno) {
+        const validadasActuales = Array.isArray(dueno.especialidades_validadas)
+          ? dueno.especialidades_validadas
+          : [];
+        const pendientesActuales = Array.isArray(dueno.especialidades_pendientes)
+          ? dueno.especialidades_pendientes
+          : [];
+
+        const nuevasValidadas = validadasActuales.includes(
+          certObj.especialidad_vinculada
+        )
+          ? validadasActuales
+          : [...validadasActuales, certObj.especialidad_vinculada];
+
+        await supabase
+          .from('perfiles')
+          .update({
+            especialidades_validadas: nuevasValidadas,
+            especialidades_pendientes: pendientesActuales.filter(
+              (e) => e !== certObj.especialidad_vinculada
+            ),
+          })
+          .eq('id', dueno.id);
+      }
+    }
+
+    cargarDatos();
+  };
+
+  const aprobarEspecialidadPendiente = async (miembro, especialidad) => {
+    const rolObjetivo = (miembro.rol || 'postulante').toLowerCase();
+    if (!esSA && (rolObjetivo === 'superadmin' || rolObjetivo === 'director')) {
+      setAlerta(
+        'Jerarquía insuficiente: solo el Superadministrador puede modificar Directores o Superadministradores.'
+      );
+      return;
+    }
+
+    const validadasActuales = Array.isArray(miembro.especialidades_validadas)
+      ? miembro.especialidades_validadas
+      : [];
+    const pendientesActuales = Array.isArray(miembro.especialidades_pendientes)
+      ? miembro.especialidades_pendientes
+      : [];
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update({
+        especialidades_validadas: validadasActuales.includes(especialidad)
+          ? validadasActuales
+          : [...validadasActuales, especialidad],
+        especialidades_pendientes: pendientesActuales.filter(
+          (e) => e !== especialidad
+        ),
+      })
+      .eq('id', miembro.id);
+
+    if (error) {
+      setAlerta(error.message);
+    } else {
+      cargarDatos();
+    }
+  };
+
+  const rechazarEspecialidadPendiente = async (miembro, especialidad) => {
+    const rolObjetivo = (miembro.rol || 'postulante').toLowerCase();
+    if (!esSA && (rolObjetivo === 'superadmin' || rolObjetivo === 'director')) {
+      setAlerta(
+        'Jerarquía insuficiente: solo el Superadministrador puede modificar Directores o Superadministradores.'
+      );
+      return;
+    }
+
+    const pendientesActuales = Array.isArray(miembro.especialidades_pendientes)
+      ? miembro.especialidades_pendientes
+      : [];
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update({
+        especialidades_pendientes: pendientesActuales.filter(
+          (e) => e !== especialidad
+        ),
+      })
+      .eq('id', miembro.id);
+
+    if (error) {
+      setAlerta(error.message);
+    } else {
+      cargarDatos();
+    }
+  };
+
+  const toggleMostrarAntecedentes = async (miembro) => {
+    if (!puedeEditarVisibilidad) {
+      setAlerta(
+        'Solo el Secretario, Director General o Superadministrador pueden cambiar la visibilidad de antecedentes.'
+      );
+      return;
+    }
+
+    const actual = miembro.mostrar_antecedentes_publicos !== false;
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ mostrar_antecedentes_publicos: !actual })
+      .eq('id', miembro.id);
+
+    if (error) {
+      setAlerta(error.message);
+    } else {
+      cargarDatos();
+    }
   };
 
   const cambiarRolMiembro = async (miembroObjetivo, nuevoRol) => {
@@ -282,7 +430,11 @@ export default function GestionDirectorio() {
     }
   };
 
-  const validarMiembro = async (miembroObjetivo, estadoValidacion, nuevoRolOpcional) => {
+  const validarMiembro = async (
+    miembroObjetivo,
+    estadoValidacion,
+    nuevoRolOpcional
+  ) => {
     setAlerta('');
     const rolObjetivo = (miembroObjetivo.rol || 'postulante').toLowerCase();
 
@@ -341,7 +493,9 @@ export default function GestionDirectorio() {
 
       cargarDatos();
     } catch (err) {
-      setAlerta(err.message || 'No se pudo actualizar la fotografía del miembro.');
+      setAlerta(
+        err.message || 'No se pudo actualizar la fotografía del miembro.'
+      );
     } finally {
       setSubiendoFotoId(null);
     }
@@ -356,16 +510,20 @@ export default function GestionDirectorio() {
     if (!error) cargarDatos();
   };
 
-  // Tarjeta reutilizable para Miembros Activos y Postulantes
   const renderTarjetaPersona = (m, esPostulanteTab = false) => {
     const rolObjetivo = (m.rol || 'postulante').toLowerCase();
     const cargosMiembro = Array.isArray(m.cargos_operativos)
       ? m.cargos_operativos
       : [];
-    const especialidadesLista =
-      Array.isArray(m.especialidades) && m.especialidades.length > 0
-        ? m.especialidades.join(' · ')
-        : m.especialidad || '';
+    const espValidadas = Array.isArray(m.especialidades_validadas)
+      ? m.especialidades_validadas
+      : [];
+    const espPendientes = Array.isArray(m.especialidades_pendientes)
+      ? m.especialidades_pendientes
+      : [];
+    const antecedentesPublicosActivos =
+      m.mostrar_antecedentes_publicos !== false;
+
     const visPublica = m.visibilidad_publica || {
       foto_url: true,
       rut: true,
@@ -424,9 +582,9 @@ export default function GestionDirectorio() {
                   {m.estado_validacion || 'pendiente'}
                 </span>
 
-                {!m.onboarding_completado && (
-                  <span className="rounded-lg bg-neutral-200 px-2 py-0.5 text-[10px] font-black uppercase text-neutral-700">
-                    Ficha Incompleta
+                {espPendientes.length > 0 && (
+                  <span className="rounded-lg bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
+                    {espPendientes.length} Especialidad(es) por Validar
                   </span>
                 )}
 
@@ -446,7 +604,9 @@ export default function GestionDirectorio() {
               {!esPostulanteTab && cargosMiembro.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {cargosMiembro.map((cargoKey) => {
-                    const info = CATALOGO_CARGOS.find((c) => c.key === cargoKey);
+                    const info = CATALOGO_CARGOS.find(
+                      (c) => c.key === cargoKey
+                    );
                     return (
                       <span
                         key={cargoKey}
@@ -472,19 +632,19 @@ export default function GestionDirectorio() {
                 {m.estado_validacion !== 'aprobado' && (
                   <button
                     onClick={() => validarMiembro(m, 'aprobado', 'postulante')}
-                    title="Autoriza su ingreso como Postulante activo (puede participar como oyente/apoyo)"
                     className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-black uppercase text-emerald-800 hover:bg-emerald-100"
                   >
-                    <CheckCircle size={15} strokeWidth={2.5} /> Autorizar Postulante
+                    <CheckCircle size={15} strokeWidth={2.5} /> Autorizar
+                    Postulante
                   </button>
                 )}
 
                 <button
                   onClick={() => validarMiembro(m, 'aprobado', 'voluntario')}
-                  title="Aprueba y promueve directamente a Voluntario activo"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
                 >
-                  <UserCheck size={15} strokeWidth={2.5} /> Promover a Voluntario
+                  <UserCheck size={15} strokeWidth={2.5} /> Promover a
+                  Voluntario
                 </button>
 
                 {m.estado_validacion === 'pendiente' && (
@@ -527,6 +687,26 @@ export default function GestionDirectorio() {
 
             <button
               type="button"
+              disabled={!puedeEditarVisibilidad}
+              onClick={() => toggleMostrarAntecedentes(m)}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black uppercase disabled:opacity-50 ${antecedentesPublicosActivos
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                  : 'border-neutral-300 bg-neutral-100 text-neutral-600'
+                }`}
+            >
+              {antecedentesPublicosActivos ? (
+                <>
+                  <Eye size={14} /> Antecedentes Visibles
+                </>
+              ) : (
+                <>
+                  <EyeOff size={14} /> Antecedentes Ocultos
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => setPanelAbiertoId(expandido ? null : m.id)}
               className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
             >
@@ -539,14 +719,17 @@ export default function GestionDirectorio() {
           </div>
         </div>
 
-        {/* Panel Desplegable: Antecedentes Completos + Cargos + Visibilidad + Foto SA */}
         {expandido && (
           <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
-            {/* Antecedentes Completos */}
+            {/* Antecedentes y Especialidades (Validadas vs Pendientes) */}
             <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
               <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
-                <User size={15} strokeWidth={2.5} className="text-[#D90429]" />
-                Ficha Completa de Antecedentes
+                <User
+                  size={15}
+                  strokeWidth={2.5}
+                  className="text-[#D90429]"
+                />
+                Ficha Completa de Antecedentes y Validación de Especialidades
               </h4>
               <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
                 <div className="rounded-lg border border-neutral-200 bg-white p-2.5">
@@ -579,18 +762,69 @@ export default function GestionDirectorio() {
                     {m.contacto_emergencia_telefono || 'N/R'})
                   </span>
                 </div>
-                <div className="rounded-lg border border-neutral-200 bg-white p-2.5 sm:col-span-3">
-                  <span className="block text-[10px] font-black uppercase text-neutral-400">
-                    Especialidades y Áreas Declaradas
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 sm:col-span-3">
+                  <span className="block text-[10px] font-black uppercase text-neutral-500">
+                    Especialidades Validadas (Visibles en Credencial)
                   </span>
-                  <span className="mt-0.5 block font-bold text-neutral-800">
-                    {especialidadesLista || 'Sin especialidades registradas'}
-                  </span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {espValidadas.length === 0 ? (
+                      <span className="text-xs font-semibold text-neutral-400">
+                        Sin especialidades validadas aún.
+                      </span>
+                    ) : (
+                      espValidadas.map((esp) => (
+                        <span
+                          key={esp}
+                          className="rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-900"
+                        >
+                          {esp}
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  {espPendientes.length > 0 && (
+                    <div className="mt-3 border-t border-neutral-100 pt-2.5">
+                      <span className="block text-[10px] font-black uppercase text-[#D90429]">
+                        Especialidades Pendientes de Validación
+                      </span>
+                      <div className="mt-1.5 flex flex-wrap gap-2">
+                        {espPendientes.map((esp) => (
+                          <div
+                            key={esp}
+                            className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1"
+                          >
+                            <span className="text-xs font-bold text-neutral-900">
+                              {esp}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                aprobarEspecialidadPendiente(m, esp)
+                              }
+                              className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase text-white hover:bg-emerald-700"
+                            >
+                              Validar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                rechazarEspecialidadPendiente(m, esp)
+                              }
+                              className="rounded bg-[#D90429] px-2 py-0.5 text-[10px] font-black uppercase text-white hover:bg-red-700"
+                            >
+                              Rechazar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Cargos Operativos (Solo para Miembros Activos, no Postulantes) */}
             {!esPostulanteTab && (
               <>
                 <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
@@ -634,7 +868,6 @@ export default function GestionDirectorio() {
                   </div>
                 </div>
 
-                {/* Visibilidad Pública en QR */}
                 <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
@@ -679,7 +912,6 @@ export default function GestionDirectorio() {
               </>
             )}
 
-            {/* Gestión de Fotografía Institucional (Exclusivo Superadmin) */}
             {esSA && (
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
                 <h4 className="mb-2.5 text-xs font-black uppercase tracking-wider text-neutral-900">
@@ -777,7 +1009,37 @@ export default function GestionDirectorio() {
         </div>
       )}
 
-      {/* Pestañas Separadas: Miembros vs Postulantes vs Certificados vs Solicitudes */}
+      {/* Notificaciones para el Directorio */}
+      {alertasSinLeer.length > 0 && (
+        <div className="mb-6 space-y-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+          <p className="flex items-center gap-1.5 text-xs font-black uppercase text-amber-950">
+            <Bell size={15} className="text-[#D90429]" />
+            Notificaciones de Antecedentes, Especialidades y Cursos (
+            {alertasSinLeer.length})
+          </p>
+          {alertasSinLeer.map((n) => (
+            <div
+              key={n.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3.5 py-2 text-xs"
+            >
+              <div>
+                <p className="font-black text-neutral-900">{n.titulo}</p>
+                {n.detalle && (
+                  <p className="text-[11px] text-neutral-600">{n.detalle}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => marcarNotificacionLeida(n.id)}
+                className="rounded-lg bg-[#0A0A0A] px-2.5 py-1 text-[10px] font-black uppercase text-[#F2B632]"
+              >
+                Marcar Leída
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mb-6 flex flex-wrap gap-2 border-b border-neutral-200">
         <button
           onClick={() => setTab('miembros')}
@@ -877,6 +1139,9 @@ export default function GestionDirectorio() {
                   </p>
                   <p className="text-xs text-neutral-400">
                     Institución: {cert.institucion || 'No indicada'}
+                    {cert.especialidad_vinculada
+                      ? ` · Especialidad vinculada: ${cert.especialidad_vinculada}`
+                      : ''}
                   </p>
                 </div>
 
@@ -893,14 +1158,14 @@ export default function GestionDirectorio() {
                   )}
 
                   <button
-                    onClick={() => validarCertificado(cert.id, 'aprobado')}
+                    onClick={() => validarCertificado(cert, 'aprobado')}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
                   >
                     <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
                   </button>
 
                   <button
-                    onClick={() => validarCertificado(cert.id, 'rechazado')}
+                    onClick={() => validarCertificado(cert, 'rechazado')}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-3 py-2 text-xs font-black uppercase text-white hover:bg-red-700"
                   >
                     <XCircle size={15} strokeWidth={2.5} /> Rechazar
