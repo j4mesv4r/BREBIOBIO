@@ -145,7 +145,6 @@ function resolverFuncionAreaCredencial(perfil) {
     return 'BÚSQUEDA Y RESCATE';
 }
 
-// Agrupa texto sin límite de líneas dentro del ancho máximo del recuadro
 function envolverTextoSinLimite(ctx, texto, maxWidth) {
     const palabras = (texto || '').trim().split(/\s+/).filter(Boolean);
     if (palabras.length === 0) return [''];
@@ -165,6 +164,27 @@ function envolverTextoSinLimite(ctx, texto, maxWidth) {
 
     lineas.push(lineaActual);
     return lineas;
+}
+
+function dibujarTextoAjustadoEnArea(ctx, texto, x, y, w, h, tamanoInicial = 18) {
+    let fontSize = tamanoInicial;
+    let lineas = [];
+    let altoLinea = fontSize + 4;
+
+    while (fontSize >= 10) {
+        ctx.font = `800 ${fontSize}px sans-serif`;
+        lineas = envolverTextoSinLimite(ctx, texto, w - 12);
+        altoLinea = fontSize + 4;
+        if (lineas.length * altoLinea <= h - 6) break;
+        fontSize -= 1;
+    }
+
+    const totalHeight = lineas.length * altoLinea;
+    const startY = y + Math.max(altoLinea * 0.85, (h - totalHeight) / 2 + altoLinea * 0.75);
+
+    lineas.forEach((linea, idx) => {
+        ctx.fillText(linea, x + 6, startY + idx * altoLinea, w - 12);
+    });
 }
 
 export default function MiPerfil() {
@@ -550,7 +570,7 @@ export default function MiPerfil() {
     };
 
     // ============================================================================
-    // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL (1012 x 638)
+    // RENDERIZADO CREDENCIAL DOBLE CARA HORIZONTAL SOBRE ÁREAS DEFINIDAS (%)
     // ============================================================================
     useEffect(() => {
         if (!aprobado) return;
@@ -576,23 +596,29 @@ export default function MiPerfil() {
 
         const renderizarAmbasCaras = async () => {
             const W = 1012;
-            const H = 638;
 
             // -------------------- 1. CARA FRONTAL --------------------
             const cFrente = canvasFrenteRef.current;
             const ctxF = cFrente.getContext('2d');
-            cFrente.width = W;
-            cFrente.height = H;
 
             const imgBaseFrente =
                 (await cargarImagen('/credencial-frente.jpg')) ||
                 (await cargarImagen('/credencial-frente.png'));
 
+            const ratioFrente =
+                imgBaseFrente && imgBaseFrente.naturalWidth
+                    ? imgBaseFrente.naturalHeight / imgBaseFrente.naturalWidth
+                    : 638 / 1012;
+            const HF = Math.round(W * ratioFrente);
+
+            cFrente.width = W;
+            cFrente.height = HF;
+
             if (imgBaseFrente) {
-                ctxF.drawImage(imgBaseFrente, 0, 0, W, H);
+                ctxF.drawImage(imgBaseFrente, 0, 0, W, HF);
             }
 
-            // Fotografía ocupando por completo el marco gris izquierdo hasta su borde
+            // Fotografía del voluntario exactamente en area-1 (3.55%, 7.97%, 33.75%, 69.80%)
             const avatarGenPng =
                 form.genero === 'femenino'
                     ? '/avatar-femenino.png'
@@ -608,10 +634,10 @@ export default function MiPerfil() {
                 (await cargarImagen(avatarGenJpg, RESPALDO_AVATAR_SVG(form.genero)));
 
             if (imgFoto) {
-                const boxX = 31;
-                const boxY = 71;
-                const boxW = 308;
-                const boxH = 424;
+                const boxX = W * 0.0355;
+                const boxY = HF * 0.0797;
+                const boxW = W * 0.3375;
+                const boxH = HF * 0.6980;
 
                 ctxF.save();
                 ctxF.beginPath();
@@ -647,7 +673,7 @@ export default function MiPerfil() {
             ctxF.fillStyle = '#FFFFFF';
             ctxF.textAlign = 'left';
             ctxF.font = '900 42px sans-serif';
-            ctxF.fillText(tituloFranjaRoja, 412, 248, 430);
+            ctxF.fillText(tituloFranjaRoja, 412, HF * 0.388, 430);
 
             // Nombre Completo
             ctxF.fillStyle = '#111827';
@@ -659,7 +685,7 @@ export default function MiPerfil() {
                     'NOMBRE COMPLETO'
                 ).toUpperCase(),
                 420,
-                345,
+                HF * 0.54,
                 545
             );
 
@@ -668,13 +694,13 @@ export default function MiPerfil() {
             ctxF.fillText(
                 formatearRutChileno(form.rut || profile?.rut) || '12.345.678-9',
                 420,
-                418
+                HF * 0.655
             );
 
             // Función / Área
             const funcionAreaTexto = resolverFuncionAreaCredencial(profile);
             ctxF.font = '900 22px sans-serif';
-            ctxF.fillText(funcionAreaTexto, 420, 502, 545);
+            ctxF.fillText(funcionAreaTexto, 420, HF * 0.787, 545);
 
             // Barra Inferior Negra
             const codigoMostrar =
@@ -696,24 +722,31 @@ export default function MiPerfil() {
 
             ctxF.fillStyle = '#FFFFFF';
             ctxF.font = '900 28px sans-serif';
-            ctxF.fillText(codigoMostrar, 92, 588);
+            ctxF.fillText(codigoMostrar, 92, HF * 0.922);
 
             ctxF.font = '800 23px sans-serif';
-            ctxF.fillText(fmtFecha(fechaEmision), 395, 588);
-            ctxF.fillText(fmtFecha(fechaVigencia), 585, 588);
+            ctxF.fillText(fmtFecha(fechaEmision), 395, HF * 0.922);
+            ctxF.fillText(fmtFecha(fechaVigencia), 585, HF * 0.922);
 
             // -------------------- 2. CARA TRASERA --------------------
             const cReverso = canvasReversoRef.current;
             const ctxR = cReverso.getContext('2d');
-            cReverso.width = W;
-            cReverso.height = H;
 
             const imgBaseReverso =
                 (await cargarImagen('/credencial-reverso.jpg')) ||
                 (await cargarImagen('/credencial-reverso.png'));
 
+            const ratioReverso =
+                imgBaseReverso && imgBaseReverso.naturalWidth
+                    ? imgBaseReverso.naturalHeight / imgBaseReverso.naturalWidth
+                    : 638 / 1012;
+            const HR = Math.round(W * ratioReverso);
+
+            cReverso.width = W;
+            cReverso.height = HR;
+
             if (imgBaseReverso) {
-                ctxR.drawImage(imgBaseReverso, 0, 0, W, H);
+                ctxR.drawImage(imgBaseReverso, 0, 0, W, HR);
             }
 
             // Grupo Sanguíneo
@@ -724,9 +757,9 @@ export default function MiPerfil() {
                 form.tipo_sangre && form.tipo_sangre !== 'No especificado'
                     ? form.tipo_sangre
                     : 'N/E';
-            ctxR.fillText(gsTexto, 875, 132);
+            ctxR.fillText(gsTexto, 875, HR * 0.207);
 
-            // Caja Gris 1: Especialidad (hasta 2 líneas)
+            // area-0: Especialidades (14.97%, 40.49%, 43.71%, 11.66%) sin límite de líneas
             const textoEspReverso =
                 form.especialidades.length > 0
                     ? form.especialidades.join(' · ').toUpperCase()
@@ -734,57 +767,50 @@ export default function MiPerfil() {
 
             ctxR.fillStyle = '#111827';
             ctxR.textAlign = 'left';
-            ctxR.font = '800 18px sans-serif';
-            const lineasEsp = envolverTextoSinLimite(ctxR, textoEspReverso, 450).slice(
-                0,
-                2
+            dibujarTextoAjustadoEnArea(
+                ctxR,
+                textoEspReverso,
+                W * 0.1497,
+                HR * 0.4049,
+                W * 0.4371,
+                HR * 0.1166,
+                17
             );
-            lineasEsp.forEach((linea, idx) => {
-                ctxR.fillText(linea, 152, 286 + idx * 24, 450);
-            });
 
-            // Caja Gris 2: Antecedentes Médicos - Alergias (sin límite de líneas, agrupado en recuadro gris)
+            // area-1: Antecedentes Médicos - Alergias (15.26%, 62.43%, 34.82%, 13.35%) sin límite de líneas
             const textoAlergias = (
                 form.alergias || 'SIN ANTECEDENTES RELEVANTES'
             ).toUpperCase();
 
-            const fontSizeAlergias = textoAlergias.length > 110 ? 14 : 16;
-            const altoLineaAlergias = fontSizeAlergias + 4;
-            ctxR.font = `800 ${fontSizeAlergias}px sans-serif`;
-
-            const lineasAlergias = envolverTextoSinLimite(
+            dibujarTextoAjustadoEnArea(
                 ctxR,
                 textoAlergias,
-                445
+                W * 0.1526,
+                HR * 0.6243,
+                W * 0.3482,
+                HR * 0.1335,
+                16
             );
-            const altoTotalBloque = lineasAlergias.length * altoLineaAlergias;
-            // Centro vertical del recuadro gris inferior (~Y: 428) ajustado según cantidad de líneas
-            const inicioYAlergias = Math.max(396, 428 - altoTotalBloque / 2 + 10);
 
-            lineasAlergias.forEach((linea, idx) => {
-                ctxR.fillText(
-                    linea,
-                    152,
-                    inicioYAlergias + idx * altoLineaAlergias,
-                    445
-                );
-            });
-
-            // Código QR centrado dentro del recuadro blanco con borde rojo
+            // area-2: Código QR centrado (69.90%, 29.60%, 26.21%, 40.35%)
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
                 codigoMostrar
             )}`;
             const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
-                width: 240,
+                width: 260,
                 margin: 1,
                 color: { dark: '#0A0A0A', light: '#FFFFFF' },
             });
 
             const imgQr = await cargarImagen(qrDataUrl);
             if (imgQr) {
-                const qrSize = 236;
-                const qrX = 710 + (256 - qrSize) / 2;
-                const qrY = 196 + (256 - qrSize) / 2;
+                const qrBoxX = W * 0.699;
+                const qrBoxY = HR * 0.296;
+                const qrBoxW = W * 0.2621;
+                const qrBoxH = HR * 0.4035;
+                const qrSize = Math.min(qrBoxW, qrBoxH) * 0.86;
+                const qrX = qrBoxX + (qrBoxW - qrSize) / 2;
+                const qrY = qrBoxY + (qrBoxH - qrSize) / 2;
                 ctxR.drawImage(imgQr, qrX, qrY, qrSize, qrSize);
             }
 
