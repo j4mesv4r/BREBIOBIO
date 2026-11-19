@@ -345,7 +345,7 @@ export default function Home() {
       {/* 1. HERO PRINCIPAL */}
       <section className="relative overflow-hidden bg-[#0A0A0A] text-white shadow-[inset_0_-10px_25px_rgba(0,0,0,0.7),0_25px_50px_-12px_rgba(0,0,0,0.45)]">
         <img
-          src={FOTOS_INSTITUCIONALES.equipoHero.local}
+          src={cfgWeb.home_foto_hero || FOTOS_INSTITUCIONALES.equipoHero.local}
           onError={(e) => {
             e.currentTarget.onerror = null;
             e.currentTarget.src = FOTOS_INSTITUCIONALES.equipoHero.fallback;
@@ -425,7 +425,7 @@ export default function Home() {
               <div className="w-full max-w-md space-y-5 rounded-3xl bg-gradient-to-b from-white via-white to-neutral-100 p-5 text-[#0A0A0A] ring-1 ring-white/90 shadow-[inset_0_2px_5px_rgba(255,255,255,1),inset_0_-6px_14px_rgba(0,0,0,0.08),0_30px_60px_-12px_rgba(0,0,0,0.85)] sm:p-6">
                 <div className="relative h-48 w-full overflow-hidden rounded-2xl shadow-[0_12px_25px_-6px_rgba(0,0,0,0.35)] ring-2 ring-[#D90429] sm:h-52">
                   <img
-                    src={FOTOS_INSTITUCIONALES.equipoHero.local}
+                    src={cfgWeb.home_foto_hero || FOTOS_INSTITUCIONALES.equipoHero.local}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = FOTOS_INSTITUCIONALES.equipoHero.fallback;
@@ -615,7 +615,7 @@ export default function Home() {
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-7">
                 <div className="group relative h-72 overflow-hidden rounded-3xl bg-neutral-900 ring-1 ring-black/10 shadow-[0_25px_50px_-12px_rgba(15,23,42,0.28)] sm:col-span-2 sm:h-80">
                   <img
-                    src={FOTOS_INSTITUCIONALES.operativoBosque.local}
+                    src={cfgWeb.home_foto_bosque || FOTOS_INSTITUCIONALES.operativoBosque.local}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = FOTOS_INSTITUCIONALES.operativoBosque.fallback;
@@ -636,7 +636,7 @@ export default function Home() {
 
                 <div className="group relative h-60 overflow-hidden rounded-3xl bg-neutral-900 ring-1 ring-black/10 shadow-[0_20px_40px_-12px_rgba(15,23,42,0.24)]">
                   <img
-                    src={FOTOS_INSTITUCIONALES.reanimacion.local}
+                    src={cfgWeb.home_foto_auxilios || FOTOS_INSTITUCIONALES.reanimacion.local}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = FOTOS_INSTITUCIONALES.reanimacion.fallback;
@@ -657,7 +657,7 @@ export default function Home() {
 
                 <div className="group relative h-60 overflow-hidden rounded-3xl bg-neutral-900 ring-1 ring-black/10 shadow-[0_20px_40px_-12px_rgba(15,23,42,0.24)]">
                   <img
-                    src={FOTOS_INSTITUCIONALES.cuerdasAltura.local}
+                    src={cfgWeb.home_foto_altura || FOTOS_INSTITUCIONALES.cuerdasAltura.local}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = FOTOS_INSTITUCIONALES.cuerdasAltura.fallback;
@@ -779,6 +779,70 @@ export default function Home() {
                 <PhoneCall size={18} strokeWidth={2.5} />
                 <span>Solicitar Apoyo</span>
               </Link>
+            </div>
+          </div>
+
+          {/* Galería horizontal con desplazamiento continuo hacia la izquierda */}
+          <div className="mt-14">
+            <style>{`
+              @keyframes breMarqueeLeft {
+                0% { transform: translateX(0); }
+                100% { transform: translateX(-50%); }
+              }
+              .bre-marquee-track {
+                animation: breMarqueeLeft 32s linear infinite;
+              }
+              .bre-marquee-wrap:hover .bre-marquee-track {
+                animation-play-state: paused;
+              }
+            `}</style>
+            <div className="bre-marquee-wrap overflow-hidden">
+              <div className="bre-marquee-track flex w-max gap-5">
+                {(() => {
+                  const baseFotos =
+                    Array.isArray(cfgWeb.galeria_fotos) &&
+                    cfgWeb.galeria_fotos.length > 0
+                      ? cfgWeb.galeria_fotos
+                      : [
+                          {
+                            id: 'def-1',
+                            url:
+                              cfgWeb.home_foto_bosque ||
+                              FOTOS_INSTITUCIONALES.operativoBosque.local,
+                            titulo: 'Búsqueda en Sector Forestal',
+                          },
+                          {
+                            id: 'def-2',
+                            url:
+                              cfgWeb.home_foto_auxilios ||
+                              FOTOS_INSTITUCIONALES.reanimacion.local,
+                            titulo: 'Soporte Vital y Trauma',
+                          },
+                          {
+                            id: 'def-3',
+                            url:
+                              cfgWeb.home_foto_altura ||
+                              FOTOS_INSTITUCIONALES.cuerdasAltura.local,
+                            titulo: 'Maniobras de Cuerdas y Altura',
+                          },
+                        ];
+                  return [...baseFotos, ...baseFotos].map((foto, i) => (
+                    <div
+                      key={`${foto.id || 'f'}-${i}`}
+                      className="relative h-48 w-72 shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-900 bg-neutral-900 shadow-md"
+                    >
+                      <img
+                        src={foto.url}
+                        alt={foto.titulo || 'Registro operativo BRE'}
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-black/80 px-3 py-2 text-xs font-black uppercase tracking-wider text-[#F2B632]">
+                        {foto.titulo}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
             </div>
           </div>
         </section>

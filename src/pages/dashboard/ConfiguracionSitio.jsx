@@ -12,6 +12,9 @@ import {
   Plus,
   Trash2,
   FileText,
+  ArrowUp,
+  ArrowDown,
+  Image,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -37,7 +40,29 @@ const CONTENIDOS_POR_DEFECTO = {
     'Edad mínima de 16 años. Postulantes de 16 y 17 años requieren autorización expresa de padres o apoderados para labores administrativas u operativas seguras sin riesgo físico.',
   postular_youtube_1: 'dQw4w9WgXcQ',
   postular_youtube_2: 'ysz5S6PUM-U',
+  home_foto_hero: '',
+  home_foto_bosque: '',
+  home_foto_auxilios: '',
+  home_foto_altura: '',
 };
+
+const GALERIA_FOTOS_POR_DEFECTO = [
+  {
+    id: 'gal-1',
+    url: '/terreno/operativo-bosque.jpg',
+    titulo: 'Búsqueda en Sector Forestal',
+  },
+  {
+    id: 'gal-2',
+    url: '/terreno/primeros-auxilios.jpg',
+    titulo: 'Instrucción Prehospitalaria',
+  },
+  {
+    id: 'gal-3',
+    url: '/terreno/rescate-altura.jpg',
+    titulo: 'Entrenamiento en Cuerdas',
+  },
+];
 
 const MEMORIAS_POR_DEFECTO = [
   {
@@ -66,6 +91,11 @@ export default function ConfiguracionSitio() {
   });
   const [contenidos, setContenidos] = useState(CONTENIDOS_POR_DEFECTO);
   const [memorias, setMemorias] = useState(MEMORIAS_POR_DEFECTO);
+  const [galeriaFotos, setGaleriaFotos] = useState(GALERIA_FOTOS_POR_DEFECTO);
+  const [nuevaFotoGaleria, setNuevaFotoGaleria] = useState({
+    url: '',
+    titulo: '',
+  });
   const [nuevaMemoria, setNuevaMemoria] = useState({
     anio: '',
     titulo: '',
@@ -99,6 +129,9 @@ export default function ConfiguracionSitio() {
           setContenidos({ ...CONTENIDOS_POR_DEFECTO, ...data.contenidos_json });
           if (Array.isArray(data.contenidos_json.memorias)) {
             setMemorias(data.contenidos_json.memorias);
+          }
+          if (Array.isArray(data.contenidos_json.galeria_fotos)) {
+            setGaleriaFotos(data.contenidos_json.galeria_fotos);
           }
         }
       }
@@ -205,6 +238,80 @@ export default function ConfiguracionSitio() {
     );
   };
 
+  const handleSubirFotoSitio = async (file, carpeta, onSuccess, keyId) => {
+    if (!file || !esSuperadmin) return;
+    setSubiendoArchivo(keyId);
+    setEstadoMsg({ type: '', text: '' });
+
+    try {
+      const ext = file.name.split('.').pop();
+      const ruta = `${carpeta}/foto_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('sitio')
+        .upload(ruta, file, { upsert: true });
+
+      if (upErr) throw upErr;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('sitio').getPublicUrl(ruta);
+
+      onSuccess(publicUrl);
+      setEstadoMsg({
+        type: 'success',
+        text: 'Fotografía subida al bucket sitio. Presiona "Guardar Cambios" para publicarla.',
+      });
+    } catch (err) {
+      setEstadoMsg({
+        type: 'error',
+        text: err.message || 'No se pudo subir la fotografía.',
+      });
+    } finally {
+      setSubiendoArchivo('');
+    }
+  };
+
+  const handleAgregarFotoGaleria = () => {
+    if (!nuevaFotoGaleria.url.trim()) {
+      setEstadoMsg({
+        type: 'error',
+        text: 'Ingresa o sube una fotografía para agregarla a la galería.',
+      });
+      return;
+    }
+
+    setGaleriaFotos((prev) => [
+      ...prev,
+      {
+        id: `gal-${Date.now()}`,
+        url: nuevaFotoGaleria.url.trim(),
+        titulo: nuevaFotoGaleria.titulo.trim() || 'Registro Operativo BRE',
+      },
+    ]);
+    setNuevaFotoGaleria({ url: '', titulo: '' });
+  };
+
+  const handleMoverFotoGaleria = (idx, direccion) => {
+    setGaleriaFotos((prev) => {
+      const destino = idx + direccion;
+      if (destino < 0 || destino >= prev.length) return prev;
+      const copia = [...prev];
+      const [item] = copia.splice(idx, 1);
+      copia.splice(destino, 0, item);
+      return copia;
+    });
+  };
+
+  const handleActualizarFotoGaleria = (idx, campo, valor) => {
+    setGaleriaFotos((prev) =>
+      prev.map((f, i) => (i === idx ? { ...f, [campo]: valor } : f))
+    );
+  };
+
+  const handleEliminarFotoGaleria = (idx) => {
+    setGaleriaFotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleGuardarTodo = async (e) => {
     e.preventDefault();
     if (!esSuperadmin) return;
@@ -223,6 +330,7 @@ export default function ConfiguracionSitio() {
           contenidos_json: {
             ...contenidos,
             memorias,
+            galeria_fotos: galeriaFotos,
           },
           updated_at: new Date().toISOString(),
         },
@@ -448,6 +556,188 @@ export default function ConfiguracionSitio() {
                   }
                   className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 text-sm font-semibold"
                 />
+              </div>
+
+              {/* Fotografías de Portada y Terreno */}
+              <div className="space-y-4 border-t border-neutral-200 pt-5">
+                <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                  <Image size={15} className="text-[#D90429]" />
+                  Fotografías de Portada y Terreno (Bucket sitio o URL)
+                </h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {[
+                    { key: 'home_foto_hero', label: 'Foto Hero Principal' },
+                    { key: 'home_foto_bosque', label: 'Foto Búsqueda en Bosque' },
+                    { key: 'home_foto_auxilios', label: 'Foto Primeros Auxilios' },
+                    { key: 'home_foto_altura', label: 'Foto Rescate en Altura' },
+                  ].map((item) => (
+                    <div key={item.key}>
+                      <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
+                        {item.label}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={contenidos[item.key] || ''}
+                          onChange={(e) =>
+                            setContenidos({
+                              ...contenidos,
+                              [item.key]: e.target.value,
+                            })
+                          }
+                          placeholder="URL imagen o sube al bucket sitio"
+                          className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+                        />
+                        <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-[11px] font-black uppercase text-white hover:bg-neutral-800">
+                          <Upload size={13} />
+                          <span>
+                            {subiendoArchivo === item.key ? '...' : 'Subir'}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) =>
+                              handleSubirFotoSitio(
+                                e.target.files?.[0],
+                                'terreno',
+                                (url) =>
+                                  setContenidos((prev) => ({
+                                    ...prev,
+                                    [item.key]: url,
+                                  })),
+                                item.key
+                              )
+                            }
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Gestor de Galería Continua */}
+              <div className="space-y-4 border-t border-neutral-200 pt-5">
+                <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                  <Image size={15} className="text-[#D90429]" />
+                  Galería Desplazamiento Continuo (Home y Postular)
+                </h3>
+
+                <div className="grid grid-cols-1 gap-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 sm:grid-cols-12">
+                  <div className="flex gap-2 sm:col-span-6">
+                    <input
+                      type="text"
+                      value={nuevaFotoGaleria.url}
+                      onChange={(e) =>
+                        setNuevaFotoGaleria({
+                          ...nuevaFotoGaleria,
+                          url: e.target.value,
+                        })
+                      }
+                      placeholder="URL fotografía o sube imagen"
+                      className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold"
+                    />
+                    <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-[11px] font-black uppercase text-white hover:bg-neutral-800">
+                      <Upload size={13} />
+                      <span>
+                        {subiendoArchivo === 'nueva-galeria' ? '...' : 'Foto'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleSubirFotoSitio(
+                            e.target.files?.[0],
+                            'galeria',
+                            (url) =>
+                              setNuevaFotoGaleria((prev) => ({
+                                ...prev,
+                                url,
+                              })),
+                            'nueva-galeria'
+                          )
+                        }
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={nuevaFotoGaleria.titulo}
+                    onChange={(e) =>
+                      setNuevaFotoGaleria({
+                        ...nuevaFotoGaleria,
+                        titulo: e.target.value,
+                      })
+                    }
+                    placeholder="Título / pie de foto"
+                    className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold sm:col-span-4"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAgregarFotoGaleria}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800 sm:col-span-2"
+                  >
+                    <Plus size={14} /> Agregar
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {galeriaFotos.map((foto, idx) => (
+                    <div
+                      key={foto.id || idx}
+                      className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-3 sm:flex-row sm:items-center"
+                    >
+                      <input
+                        type="text"
+                        value={foto.url}
+                        onChange={(e) =>
+                          handleActualizarFotoGaleria(idx, 'url', e.target.value)
+                        }
+                        placeholder="URL"
+                        className="flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        value={foto.titulo}
+                        onChange={(e) =>
+                          handleActualizarFotoGaleria(idx, 'titulo', e.target.value)
+                        }
+                        placeholder="Título"
+                        className="flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMoverFotoGaleria(idx, -1)}
+                          disabled={idx === 0}
+                          className="rounded-lg border border-neutral-300 p-1.5 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40"
+                          title="Subir"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoverFotoGaleria(idx, 1)}
+                          disabled={idx === galeriaFotos.length - 1}
+                          className="rounded-lg border border-neutral-300 p-1.5 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40"
+                          title="Bajar"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarFotoGaleria(idx)}
+                          className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-[#D90429] hover:bg-red-100"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -787,6 +1077,61 @@ export default function ConfiguracionSitio() {
                     placeholder="Ej. ysz5S6PUM-U"
                     className="w-full rounded-xl border border-neutral-300 px-3.5 py-2 font-mono text-xs font-bold"
                   />
+                </div>
+              </div>
+
+              {/* Fotografías de Despliegues en Postular */}
+              <div className="space-y-3 border-t border-neutral-200 pt-4">
+                <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                  <Image size={15} className="text-[#D90429]" />
+                  Fotografías de Despliegues (Postulación)
+                </h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {[
+                    { key: 'home_foto_bosque', label: 'Despliegue Forestal' },
+                    { key: 'home_foto_auxilios', label: 'Primeros Auxilios' },
+                    { key: 'home_foto_altura', label: 'Rescate en Altura' },
+                  ].map((item) => (
+                    <div key={`post-${item.key}`}>
+                      <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
+                        {item.label}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={contenidos[item.key] || ''}
+                          onChange={(e) =>
+                            setContenidos({
+                              ...contenidos,
+                              [item.key]: e.target.value,
+                            })
+                          }
+                          placeholder="URL imagen"
+                          className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+                        />
+                        <label className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-[#0A0A0A] px-3 py-2 text-[11px] font-black uppercase text-white hover:bg-neutral-800">
+                          <Upload size={13} />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) =>
+                              handleSubirFotoSitio(
+                                e.target.files?.[0],
+                                'terreno',
+                                (url) =>
+                                  setContenidos((prev) => ({
+                                    ...prev,
+                                    [item.key]: url,
+                                  })),
+                                `post-${item.key}`
+                              )
+                            }
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

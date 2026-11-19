@@ -630,7 +630,23 @@ export default function Postular() {
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                {FOTOS_DESPLIEGUES.map((foto, idx) => (
+                {[
+                  {
+                    src: cfgWeb.home_foto_bosque || FOTOS_DESPLIEGUES[0].src,
+                    fallback: FOTOS_DESPLIEGUES[0].fallback,
+                    titulo: FOTOS_DESPLIEGUES[0].titulo,
+                  },
+                  {
+                    src: cfgWeb.home_foto_auxilios || FOTOS_DESPLIEGUES[1].src,
+                    fallback: FOTOS_DESPLIEGUES[1].fallback,
+                    titulo: FOTOS_DESPLIEGUES[1].titulo,
+                  },
+                  {
+                    src: cfgWeb.home_foto_altura || FOTOS_DESPLIEGUES[2].src,
+                    fallback: FOTOS_DESPLIEGUES[2].fallback,
+                    titulo: FOTOS_DESPLIEGUES[2].titulo,
+                  },
+                ].map((foto, idx) => (
                   <div
                     key={idx}
                     className="overflow-hidden rounded-2xl border-2 border-neutral-950 bg-neutral-900 shadow-lg"
@@ -651,6 +667,52 @@ export default function Postular() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Galería horizontal continua pausable al hover */}
+              <div className="mt-8 overflow-hidden">
+                <style>{`
+                  @keyframes brePostularMarquee {
+                    0% { transform: translateX(0); }
+                    100% { transform: translateX(-50%); }
+                  }
+                  .bre-postular-track {
+                    animation: brePostularMarquee 32s linear infinite;
+                  }
+                  .bre-postular-wrap:hover .bre-postular-track {
+                    animation-play-state: paused;
+                  }
+                `}</style>
+                <div className="bre-postular-wrap overflow-hidden">
+                  <div className="bre-postular-track flex w-max gap-5">
+                    {(() => {
+                      const base =
+                        Array.isArray(cfgWeb.galeria_fotos) &&
+                        cfgWeb.galeria_fotos.length > 0
+                          ? cfgWeb.galeria_fotos
+                          : FOTOS_DESPLIEGUES.map((f, i) => ({
+                              id: `p-${i}`,
+                              url: f.src,
+                              titulo: f.titulo,
+                            }));
+                      return [...base, ...base].map((item, i) => (
+                        <div
+                          key={`${item.id || 'pf'}-${i}`}
+                          className="relative h-44 w-64 shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-950 bg-neutral-900 shadow-md"
+                        >
+                          <img
+                            src={item.url}
+                            alt={item.titulo || 'Despliegue BRE'}
+                            className="h-full w-full object-cover"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-black/80 px-3 py-2 text-xs font-black uppercase tracking-wider text-[#F2B632]">
+                            {item.titulo}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
               </div>
             </div>
 
