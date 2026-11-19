@@ -572,11 +572,32 @@ export default function MiPerfil() {
                 profile?.codigo_credencial ||
                 (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
 
-            const validadasFiltradas = especialidadesValidadas.filter((esp) =>
+            const validadasPrevias = Array.isArray(profile?.especialidades_validadas)
+                ? profile.especialidades_validadas
+                : [];
+            const pendientesPrevias = Array.isArray(profile?.especialidades_pendientes)
+                ? profile.especialidades_pendientes
+                : [];
+
+            // Mantener como validadas solo las especialidades que ya estaban validadas y siguen en la lista
+            const validadasVigentes = validadasPrevias.filter((esp) =>
                 form.especialidades.some(
                     (actual) => actual.toLowerCase() === esp.toLowerCase()
                 )
             );
+
+            // Identificar únicamente las especialidades nuevas o modificadas que no estaban validadas
+            const nuevasOModificadas = form.especialidades.filter((esp) => {
+                const yaValidada = validadasVigentes.some(
+                    (v) => v.toLowerCase() === esp.toLowerCase()
+                );
+                return !yaValidada;
+            });
+
+            const huboCambioEspecialidades =
+                nuevasOModificadas.length > 0 ||
+                validadasVigentes.length !== validadasPrevias.length ||
+                JSON.stringify(nuevasOModificadas) !== JSON.stringify(pendientesPrevias);
 
             const payload = {
                 nombre_completo: form.nombre_completo.trim(),
@@ -587,8 +608,8 @@ export default function MiPerfil() {
                 region: form.region,
                 comuna: form.comuna,
                 especialidades: form.especialidades,
-                especialidades_validadas: validadasFiltradas,
-                especialidades_pendientes: form.especialidades,
+                especialidades_validadas: validadasVigentes,
+                especialidades_pendientes: nuevasOModificadas,
                 tipo_sangre: form.tipo_sangre,
                 alergias: form.alergias.trim() || 'Ninguna',
                 contacto_emergencia_nombre: form.contacto_emergencia_nombre.trim(),
@@ -610,16 +631,20 @@ export default function MiPerfil() {
 
             if (error) throw error;
 
-            await supabase.from('notificaciones_directorio').insert([
-                {
-                    perfil_origen_id: user.id,
-                    tipo: 'especialidad',
-                    titulo: `Actualización de antecedentes/especialidades: ${form.nombre_completo.trim()}`,
-                    detalle: `Especialidades en ficha (${form.especialidades.length
-                        }): ${form.especialidades.join(', ') || 'Ninguna'}`,
-                    leida: false,
-                },
-            ]);
+            // Solo notifica al Directorio cuando se agregan, quitan o modifican especialidades
+            if (huboCambioEspecialidades && nuevasOModificadas.length > 0) {
+                await supabase.from('notificaciones_directorio').insert([
+                    {
+                        perfil_origen_id: user.id,
+                        tipo: 'especialidad',
+                        titulo: `Nuevas especialidades por validar: ${form.nombre_completo.trim()}`,
+                        detalle: `Especialidades agregadas/modificadas: ${nuevasOModificadas.join(
+                            ', '
+                        )}`,
+                        leida: false,
+                    },
+                ]);
+            }
 
             setForm((prev) => ({
                 ...prev,
@@ -630,7 +655,9 @@ export default function MiPerfil() {
             setStatus({
                 type: 'success',
                 message:
-                    'Ficha y especialidades guardadas. Se envió notificación al Directorio para validar los cambios.',
+                    nuevasOModificadas.length > 0
+                        ? 'Datos actualizados. Solo las especialidades nuevas o modificadas fueron enviadas a validación del Directorio.'
+                        : 'Datos de perfil actualizados correctamente.',
             });
         } catch (err) {
             setStatus({
@@ -970,8 +997,8 @@ export default function MiPerfil() {
                         : 'Nombre completo hasta 6 especialidades'}
                     )
                 </label>
-                <span className="text-[11px] font-bold text-amber-800">
-                    Cambios requieren validación del Directorio
+                <span className="text-[11px] font-bold text-neutral-500">
+                    Solo las especialidades nuevas o modificadas pasan a validación
                 </span>
             </div>
 
@@ -991,7 +1018,7 @@ export default function MiPerfil() {
                         >
                             <span>
                                 {form.especialidades.length > 6 ? `${abrev} · ${esp}` : esp}{' '}
-                                {estaValidada ? '(Validada)' : '(Por validar)'}
+                                {estaValidada ? '(Validada)' : '(Nueva / Por validar)'}
                             </span>
                             <button
                                 type="button"
@@ -1793,7 +1820,7 @@ export default function MiPerfil() {
                             className="inline-flex items-center gap-2 rounded-xl bg-[#0A0A0A] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800 disabled:opacity-50"
                         >
                             <Save size={15} />
-                            {saving ? 'Guardando...' : 'Actualizar y Enviar a Validación'}
+                            {saving ? 'Guardando...' : 'Guardar Cambios'}
                         </button>
                     </div>
                 </form>
