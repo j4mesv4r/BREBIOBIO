@@ -90,7 +90,6 @@ const RESPALDO_AVATAR_SVG = (genero) =>
     </svg>`
     )}`;
 
-// Título principal en franja roja: Superadmin sin cargo directivo/DO -> Voluntario / Voluntaria
 function resolverTituloFranjaCredencial(perfil, generoActual) {
     const r = (perfil?.rol || 'voluntario').toLowerCase();
     const cargos = Array.isArray(perfil?.cargos_operativos)
@@ -109,8 +108,8 @@ function resolverTituloFranjaCredencial(perfil, generoActual) {
     return r.toUpperCase();
 }
 
-// Función / Área específica en la organización (por defecto: BÚSQUEDA Y RESCATE)
 function resolverFuncionAreaCredencial(perfil) {
+    const r = (perfil?.rol || 'voluntario').toLowerCase();
     const cargos = Array.isArray(perfil?.cargos_operativos)
         ? perfil.cargos_operativos.map((c) => c.toLowerCase())
         : [];
@@ -135,19 +134,19 @@ function resolverFuncionAreaCredencial(perfil) {
         return Array.from(new Set(cargosMapeados)).join(' · ');
     }
 
-    const funcionTexto = (perfil?.funcion || perfil?.cargo_ong || '').trim();
-    if (
-        funcionTexto &&
-        !['superadmin', 'postulante', 'usuario'].includes(funcionTexto.toLowerCase())
-    ) {
-        return funcionTexto.toUpperCase();
+    if (r === 'superadmin') {
+        return 'OPERATIVO - ADMINISTRATIVO';
+    }
+
+    if (r === 'director') {
+        return 'DIRECTORIO';
     }
 
     return 'BÚSQUEDA Y RESCATE';
 }
 
-// Divide texto en líneas ajustadas al ancho máximo en canvas
-function envolverTextoEnLineas(ctx, texto, maxWidth, maxLineas = 3) {
+// Agrupa texto sin límite de líneas dentro del ancho máximo del recuadro
+function envolverTextoSinLimite(ctx, texto, maxWidth) {
     const palabras = (texto || '').trim().split(/\s+/).filter(Boolean);
     if (palabras.length === 0) return [''];
 
@@ -161,15 +160,11 @@ function envolverTextoEnLineas(ctx, texto, maxWidth, maxLineas = 3) {
         } else {
             lineas.push(lineaActual);
             lineaActual = palabras[i];
-            if (lineas.length === maxLineas - 1) break;
         }
     }
 
-    if (lineas.length < maxLineas) {
-        lineas.push(lineaActual);
-    }
-
-    return lineas.slice(0, maxLineas);
+    lineas.push(lineaActual);
+    return lineas;
 }
 
 export default function MiPerfil() {
@@ -597,7 +592,7 @@ export default function MiPerfil() {
                 ctxF.drawImage(imgBaseFrente, 0, 0, W, H);
             }
 
-            // Fotografía del Voluntario cubriendo íntegramente el área dispuesta (X: 35, Y: 72, W: 300, H: 400)[cite: 13, 14]
+            // Fotografía ocupando por completo el marco gris izquierdo hasta su borde
             const avatarGenPng =
                 form.genero === 'femenino'
                     ? '/avatar-femenino.png'
@@ -613,17 +608,16 @@ export default function MiPerfil() {
                 (await cargarImagen(avatarGenJpg, RESPALDO_AVATAR_SVG(form.genero)));
 
             if (imgFoto) {
-                const boxX = 35;
-                const boxY = 72;
-                const boxW = 300;
-                const boxH = 400;
+                const boxX = 31;
+                const boxY = 71;
+                const boxW = 308;
+                const boxH = 424;
 
                 ctxF.save();
                 ctxF.beginPath();
                 ctxF.roundRect(boxX, boxY, boxW, boxH, 16);
                 ctxF.clip();
 
-                // Escala proporcional para llenar el área sin dejar bordes vacíos[cite: 13, 14]
                 const ratioImg = imgFoto.width / imgFoto.height;
                 const ratioBox = boxW / boxH;
                 let drawW = boxW;
@@ -645,7 +639,7 @@ export default function MiPerfil() {
                 ctxF.restore();
             }
 
-            // Franja Roja: VOLUNTARIO / VOLUNTARIA si es superadmin sin cargo directivo/DO[cite: 13]
+            // Franja Roja
             const tituloFranjaRoja = resolverTituloFranjaCredencial(
                 profile,
                 form.genero
@@ -677,12 +671,12 @@ export default function MiPerfil() {
                 418
             );
 
-            // Función / Área debajo de la etiqueta "FUNCIÓN / ÁREA"[cite: 13]
+            // Función / Área
             const funcionAreaTexto = resolverFuncionAreaCredencial(profile);
             ctxF.font = '900 22px sans-serif';
             ctxF.fillText(funcionAreaTexto, 420, 502, 545);
 
-            // Barra Inferior Negra: ID Institucional + Emisión + Vigencia
+            // Barra Inferior Negra
             const codigoMostrar =
                 profile?.codigo_credencial ||
                 (form.rut
@@ -722,7 +716,7 @@ export default function MiPerfil() {
                 ctxR.drawImage(imgBaseReverso, 0, 0, W, H);
             }
 
-            // Grupo Sanguíneo (Arriba a la derecha bajo "GRUPO SANGUINEO")
+            // Grupo Sanguíneo
             ctxR.fillStyle = '#FFFFFF';
             ctxR.textAlign = 'center';
             ctxR.font = '900 38px sans-serif';
@@ -732,7 +726,7 @@ export default function MiPerfil() {
                     : 'N/E';
             ctxR.fillText(gsTexto, 875, 132);
 
-            // Caja Gris 1: Especialidad (hasta 2 líneas dentro del recuadro gris)[cite: 12]
+            // Caja Gris 1: Especialidad (hasta 2 líneas)
             const textoEspReverso =
                 form.especialidades.length > 0
                     ? form.especialidades.join(' · ').toUpperCase()
@@ -741,39 +735,31 @@ export default function MiPerfil() {
             ctxR.fillStyle = '#111827';
             ctxR.textAlign = 'left';
             ctxR.font = '800 18px sans-serif';
-            const lineasEsp = envolverTextoEnLineas(
-                ctxR,
-                textoEspReverso,
-                450,
+            const lineasEsp = envolverTextoSinLimite(ctxR, textoEspReverso, 450).slice(
+                0,
                 2
             );
             lineasEsp.forEach((linea, idx) => {
                 ctxR.fillText(linea, 152, 286 + idx * 24, 450);
             });
 
-            // Caja Gris 2: Antecedentes Médicos - Alergias (auto-ajuste hasta 3 líneas dentro del recuadro gris)[cite: 12]
+            // Caja Gris 2: Antecedentes Médicos - Alergias (sin límite de líneas, agrupado en recuadro gris)
             const textoAlergias = (
                 form.alergias || 'SIN ANTECEDENTES RELEVANTES'
             ).toUpperCase();
 
-            let fontSizeAlergias = 18;
+            const fontSizeAlergias = textoAlergias.length > 110 ? 14 : 16;
+            const altoLineaAlergias = fontSizeAlergias + 4;
             ctxR.font = `800 ${fontSizeAlergias}px sans-serif`;
-            let lineasAlergias = envolverTextoEnLineas(
+
+            const lineasAlergias = envolverTextoSinLimite(
                 ctxR,
                 textoAlergias,
-                445,
-                3
+                445
             );
-
-            if (textoAlergias.length > 95) {
-                fontSizeAlergias = 15;
-                ctxR.font = `800 ${fontSizeAlergias}px sans-serif`;
-                lineasAlergias = envolverTextoEnLineas(ctxR, textoAlergias, 445, 3);
-            }
-
-            const altoLineaAlergias = fontSizeAlergias + 5;
-            const inicioYAlergias =
-                lineasAlergias.length === 1 ? 430 : lineasAlergias.length === 2 ? 418 : 408;
+            const altoTotalBloque = lineasAlergias.length * altoLineaAlergias;
+            // Centro vertical del recuadro gris inferior (~Y: 428) ajustado según cantidad de líneas
+            const inicioYAlergias = Math.max(396, 428 - altoTotalBloque / 2 + 10);
 
             lineasAlergias.forEach((linea, idx) => {
                 ctxR.fillText(
@@ -784,7 +770,7 @@ export default function MiPerfil() {
                 );
             });
 
-            // Código QR centrado dentro del recuadro blanco con borde rojo[cite: 12]
+            // Código QR centrado dentro del recuadro blanco con borde rojo
             const urlVerificacion = `${window.location.origin}/voluntario/${encodeURIComponent(
                 codigoMostrar
             )}`;
@@ -796,7 +782,6 @@ export default function MiPerfil() {
 
             const imgQr = await cargarImagen(qrDataUrl);
             if (imgQr) {
-                // Recuadro blanco interior del marco rojo: X ~ 710..966, Y ~ 196..452
                 const qrSize = 236;
                 const qrX = 710 + (256 - qrSize) / 2;
                 const qrY = 196 + (256 - qrSize) / 2;
