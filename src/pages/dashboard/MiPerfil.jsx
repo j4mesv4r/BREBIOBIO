@@ -52,6 +52,16 @@ const ESPECIALIDADES_CATALOGO = [
     { nombre: 'Prensa, Comunicaciones y Vocería en Crisis', abrev: 'COMUNIC' },
     { nombre: 'Auditoría, Cumplimiento y Transparencia', abrev: 'AUDITORÍA' },
     { nombre: 'Bienestar y Cuidado de Equipos Operativos', abrev: 'BIENESTAR' },
+    { nombre: 'Tecnologías de la Información y Soporte (TI)', abrev: 'TI' },
+    { nombre: 'Analista de Datos e Inteligencia Operativa', abrev: 'ANALISTA' },
+    { nombre: 'Desarrollo de Software y Plataformas Web', abrev: 'DEV/TI' },
+    { nombre: 'Redes, Infraestructura y Conectividad Satelital', abrev: 'REDES/SAT' },
+    { nombre: 'Ciberseguridad y Protección de Datos', abrev: 'CIBERSEG' },
+    { nombre: 'Electrónica, Energía Solar y Respaldo Eléctrico', abrev: 'ELECTRÓN' },
+    { nombre: 'Análisis Meteorológico y Riesgos Naturales', abrev: 'METEO' },
+    { nombre: 'Planificación Estratégica y Gestión de Riesgos', abrev: 'PLANIF' },
+    { nombre: 'Asesoría Jurídica y Normativa Institucional', abrev: 'JURÍDICO' },
+    { nombre: 'Prevención de Riesgos y Seguridad Operacional', abrev: 'PREV. RIESG' },
 ];
 
 function obtenerAbreviaturaEspecialidad(nombreEsp = '') {
@@ -320,7 +330,6 @@ export default function MiPerfil() {
                     ? [profile.especialidad]
                     : [];
 
-            // Conserva especialidades validadas y pendientes/agregadas manualmente para control del usuario
             const combinadas = Array.from(
                 new Set([...validadasPrev, ...pendientesPrev, ...legacyPrev])
             );
@@ -563,7 +572,6 @@ export default function MiPerfil() {
                 profile?.codigo_credencial ||
                 (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
 
-            // Las especialidades eliminadas dejan de estar validadas; las restantes pasan a revisión del Directorio
             const validadasFiltradas = especialidadesValidadas.filter((esp) =>
                 form.especialidades.some(
                     (actual) => actual.toLowerCase() === esp.toLowerCase()
@@ -602,7 +610,6 @@ export default function MiPerfil() {
 
             if (error) throw error;
 
-            // Notifica al Directorio / Superadmin para validar antecedentes y especialidades actualizadas
             await supabase.from('notificaciones_directorio').insert([
                 {
                     perfil_origen_id: user.id,
@@ -850,7 +857,6 @@ export default function MiPerfil() {
 
             ctxF.font = '800 23px sans-serif';
             ctxF.fillText(fmtFecha(fechaEmision), 395, HF * 0.922);
-            ctxFrente.font = '800 23px sans-serif';
             ctxF.fillText(fmtFecha(fechaVigencia), 585, HF * 0.922);
 
             const cReverso = canvasReversoRef.current;
@@ -882,7 +888,6 @@ export default function MiPerfil() {
                     : 'N/E';
             ctxR.fillText(gsTexto, 875, HR * 0.207);
 
-            // Si hay más de 6 especialidades validadas, muestra abreviaturas automáticamente
             const espParaCredencial = formatearEspecialidadesParaCredencial(
                 especialidadesValidadas
             );
@@ -1008,7 +1013,7 @@ export default function MiPerfil() {
                         setMostrarSugerencias(true);
                     }}
                     onKeyDown={handleKeyDownEspecialidad}
-                    placeholder="Selecciona del catálogo o escribe manual y presiona Enter..."
+                    placeholder="Selecciona del catálogo (TI, Analista, etc.) o escribe manual y Enter..."
                     className="min-w-[200px] flex-1 bg-transparent text-sm font-semibold outline-none"
                 />
             </div>
