@@ -40,7 +40,66 @@ const ESPECIALIDADES_CATALOGO = [
     { nombre: 'Tesorería, Contabilidad y Rendiciones', abrev: 'FINANZAS' },
     { nombre: 'Instrucción y Capacitación Operativa', abrev: 'INSTRUC' },
     { nombre: 'Apoyo Psicosocial en Emergencias', abrev: 'PSICOSOC' },
+    { nombre: 'Incendios Forestales y Control de Fuego', abrev: 'IF/FUEGO' },
+    { nombre: 'Evaluación de Daños y Análisis de Necesidades (EDAN)', abrev: 'EDAN' },
+    { nombre: 'Soporte Vital Básico (BLS / RCP / DEA)', abrev: 'BLS/RCP' },
+    { nombre: 'Soporte Vital Avanzado en Trauma (PHTLS)', abrev: 'PHTLS' },
+    { nombre: 'Operación de Vehículos Todoterreno (4x4 / UTV)', abrev: '4X4/UTV' },
+    { nombre: 'Operación de Embarcaciones y Rescate Costero', abrev: 'MARÍTIMO' },
+    { nombre: 'Rescate en Estructuras Colapsadas', abrev: 'COLAPSO' },
+    { nombre: 'Rescate en Espacios Confinados', abrev: 'CONFINADO' },
+    { nombre: 'Enlace Interinstitucional y SENAPRED', abrev: 'ENLACE' },
+    { nombre: 'Prensa, Comunicaciones y Vocería en Crisis', abrev: 'COMUNIC' },
+    { nombre: 'Auditoría, Cumplimiento y Transparencia', abrev: 'AUDITORÍA' },
+    { nombre: 'Bienestar y Cuidado de Equipos Operativos', abrev: 'BIENESTAR' },
 ];
+
+function obtenerAbreviaturaEspecialidad(nombreEsp = '') {
+    const limpio = (nombreEsp || '').trim();
+    if (!limpio) return '';
+
+    const matchCatalogo = ESPECIALIDADES_CATALOGO.find(
+        (item) =>
+            item.nombre.toLowerCase() === limpio.toLowerCase() ||
+            item.abrev.toLowerCase() === limpio.toLowerCase()
+    );
+    if (matchCatalogo) return matchCatalogo.abrev;
+
+    const parentesis = limpio.match(/\(([^)]+)\)/);
+    if (parentesis?.[1]) {
+        return parentesis[1].trim().toUpperCase().slice(0, 10);
+    }
+
+    const palabras = limpio
+        .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s/]/g, '')
+        .split(/\s+/)
+        .filter((p) => p.length > 2);
+
+    if (palabras.length === 0) return limpio.toUpperCase().slice(0, 8);
+    if (palabras.length === 1) return palabras[0].toUpperCase().slice(0, 8);
+
+    return palabras
+        .slice(0, 3)
+        .map((p) => p[0].toUpperCase())
+        .join('');
+}
+
+function formatearEspecialidadesParaCredencial(listaEspecialidades = []) {
+    const lista = Array.isArray(listaEspecialidades)
+        ? listaEspecialidades.filter(Boolean)
+        : [];
+    if (lista.length === 0) {
+        return 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
+    }
+    if (lista.length > 6) {
+        return lista
+            .map((esp) => obtenerAbreviaturaEspecialidad(esp))
+            .filter(Boolean)
+            .join(' · ')
+            .toUpperCase();
+    }
+    return lista.join(' · ').toUpperCase();
+}
 
 function formatearRutChileno(valor) {
     const limpio = (valor || '').replace(/[^0-9kK]/g, '').toUpperCase();
@@ -249,15 +308,22 @@ export default function MiPerfil() {
 
     useEffect(() => {
         if (profile) {
-            const listaPendienteOPrevia = Array.isArray(
-                profile.especialidades_pendientes
-            )
+            const validadasPrev = Array.isArray(profile.especialidades_validadas)
+                ? profile.especialidades_validadas
+                : [];
+            const pendientesPrev = Array.isArray(profile.especialidades_pendientes)
                 ? profile.especialidades_pendientes
-                : Array.isArray(profile.especialidades)
-                    ? profile.especialidades
-                    : profile.especialidad
-                        ? [profile.especialidad]
-                        : [];
+                : [];
+            const legacyPrev = Array.isArray(profile.especialidades)
+                ? profile.especialidades
+                : profile.especialidad
+                    ? [profile.especialidad]
+                    : [];
+
+            // Conserva especialidades validadas y pendientes/agregadas manualmente para control del usuario
+            const combinadas = Array.from(
+                new Set([...validadasPrev, ...pendientesPrev, ...legacyPrev])
+            );
 
             setForm({
                 nombre_completo: profile.nombre_completo || '',
@@ -266,7 +332,7 @@ export default function MiPerfil() {
                 telefono: profile.telefono || '',
                 region: profile.region || 'Región del Biobío',
                 comuna: profile.comuna || 'Concepción',
-                especialidades: listaPendienteOPrevia,
+                especialidades: combinadas,
                 tipo_sangre: profile.tipo_sangre || 'No especificado',
                 alergias: profile.alergias || '',
                 contacto_emergencia_nombre: profile.contacto_emergencia_nombre || '',
@@ -406,7 +472,8 @@ export default function MiPerfil() {
 
     const sugerenciasFiltradas = ESPECIALIDADES_CATALOGO.filter(
         (s) =>
-            s.nombre.toLowerCase().includes(inputEsp.toLowerCase()) &&
+            (s.nombre.toLowerCase().includes(inputEsp.toLowerCase()) ||
+                s.abrev.toLowerCase().includes(inputEsp.toLowerCase())) &&
             !form.especialidades.some(
                 (e) => e.toLowerCase() === s.nombre.toLowerCase()
             )
@@ -496,6 +563,13 @@ export default function MiPerfil() {
                 profile?.codigo_credencial ||
                 (digitosRut.length >= 6 ? `BRE-${digitosRut.slice(0, 6)}` : null);
 
+            // Las especialidades eliminadas dejan de estar validadas; las restantes pasan a revisión del Directorio
+            const validadasFiltradas = especialidadesValidadas.filter((esp) =>
+                form.especialidades.some(
+                    (actual) => actual.toLowerCase() === esp.toLowerCase()
+                )
+            );
+
             const payload = {
                 nombre_completo: form.nombre_completo.trim(),
                 rut: formatearRutChileno(form.rut),
@@ -504,6 +578,8 @@ export default function MiPerfil() {
                 telefono: form.telefono.trim(),
                 region: form.region,
                 comuna: form.comuna,
+                especialidades: form.especialidades,
+                especialidades_validadas: validadasFiltradas,
                 especialidades_pendientes: form.especialidades,
                 tipo_sangre: form.tipo_sangre,
                 alergias: form.alergias.trim() || 'Ninguna',
@@ -526,14 +602,14 @@ export default function MiPerfil() {
 
             if (error) throw error;
 
-            // Notificar al Directorio para validación de antecedentes y especialidades
+            // Notifica al Directorio / Superadmin para validar antecedentes y especialidades actualizadas
             await supabase.from('notificaciones_directorio').insert([
                 {
                     perfil_origen_id: user.id,
                     tipo: 'especialidad',
-                    titulo: `Revisión de antecedentes y especialidades: ${form.nombre_completo.trim()}`,
-                    detalle: `Especialidades ingresadas: ${form.especialidades.join(', ') || 'Ninguna'
-                        }`,
+                    titulo: `Actualización de antecedentes/especialidades: ${form.nombre_completo.trim()}`,
+                    detalle: `Especialidades en ficha (${form.especialidades.length
+                        }): ${form.especialidades.join(', ') || 'Ninguna'}`,
                     leida: false,
                 },
             ]);
@@ -547,7 +623,7 @@ export default function MiPerfil() {
             setStatus({
                 type: 'success',
                 message:
-                    'Antecedentes guardados. Las especialidades ingresadas fueron enviadas al Directorio para su validación.',
+                    'Ficha y especialidades guardadas. Se envió notificación al Directorio para validar los cambios.',
             });
         } catch (err) {
             setStatus({
@@ -774,6 +850,7 @@ export default function MiPerfil() {
 
             ctxF.font = '800 23px sans-serif';
             ctxF.fillText(fmtFecha(fechaEmision), 395, HF * 0.922);
+            ctxFrente.font = '800 23px sans-serif';
             ctxF.fillText(fmtFecha(fechaVigencia), 585, HF * 0.922);
 
             const cReverso = canvasReversoRef.current;
@@ -805,10 +882,10 @@ export default function MiPerfil() {
                     : 'N/E';
             ctxR.fillText(gsTexto, 875, HR * 0.207);
 
-            const espParaCredencial =
-                especialidadesValidadas.length > 0
-                    ? especialidadesValidadas.join(' · ').toUpperCase()
-                    : 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
+            // Si hay más de 6 especialidades validadas, muestra abreviaturas automáticamente
+            const espParaCredencial = formatearEspecialidadesParaCredencial(
+                especialidadesValidadas
+            );
 
             ctxR.fillStyle = '#111827';
             ctxR.textAlign = 'left';
@@ -880,12 +957,25 @@ export default function MiPerfil() {
 
     const renderSelectorEspecialidades = () => (
         <div className="relative sm:col-span-2">
-            <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
-                Especialidades Propuestas (Requieren Validación del Directorio)
-            </label>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <label className="block text-xs font-black uppercase text-neutral-700">
+                    Mis Especialidades ({form.especialidades.length} seleccionadas ·{' '}
+                    {form.especialidades.length > 6
+                        ? 'En credencial se muestran abreviaturas por superar 6'
+                        : 'Nombre completo hasta 6 especialidades'}
+                    )
+                </label>
+                <span className="text-[11px] font-bold text-amber-800">
+                    Cambios requieren validación del Directorio
+                </span>
+            </div>
+
             <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 py-2 focus-within:border-[#0A0A0A]">
                 {form.especialidades.map((esp) => {
-                    const estaValidada = especialidadesValidadas.includes(esp);
+                    const estaValidada = especialidadesValidadas.some(
+                        (v) => v.toLowerCase() === esp.toLowerCase()
+                    );
+                    const abrev = obtenerAbreviaturaEspecialidad(esp);
                     return (
                         <span
                             key={esp}
@@ -894,7 +984,10 @@ export default function MiPerfil() {
                                     : 'bg-[#0A0A0A] text-[#F2B632]'
                                 }`}
                         >
-                            {esp} {!estaValidada && '(Pendiente)'}
+                            <span>
+                                {form.especialidades.length > 6 ? `${abrev} · ${esp}` : esp}{' '}
+                                {estaValidada ? '(Validada)' : '(Por validar)'}
+                            </span>
                             <button
                                 type="button"
                                 onClick={() => eliminarEspecialidadChip(esp)}
@@ -915,13 +1008,13 @@ export default function MiPerfil() {
                         setMostrarSugerencias(true);
                     }}
                     onKeyDown={handleKeyDownEspecialidad}
-                    placeholder="Selecciona o escribe especialidad y presiona Enter..."
-                    className="min-w-[180px] flex-1 bg-transparent text-sm font-semibold outline-none"
+                    placeholder="Selecciona del catálogo o escribe manual y presiona Enter..."
+                    className="min-w-[200px] flex-1 bg-transparent text-sm font-semibold outline-none"
                 />
             </div>
 
             {mostrarSugerencias && sugerenciasFiltradas.length > 0 && (
-                <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
                     {sugerenciasFiltradas.map((sug) => (
                         <button
                             key={sug.nombre}
@@ -1695,7 +1788,7 @@ export default function MiPerfil() {
                             className="inline-flex items-center gap-2 rounded-xl bg-[#0A0A0A] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800 disabled:opacity-50"
                         >
                             <Save size={15} />
-                            {saving ? 'Guardando...' : 'Actualizar Mis Antecedentes'}
+                            {saving ? 'Guardando...' : 'Actualizar y Enviar a Validación'}
                         </button>
                     </div>
                 </form>
@@ -1744,7 +1837,7 @@ export default function MiPerfil() {
                             >
                                 {ESPECIALIDADES_CATALOGO.map((esp) => (
                                     <option key={esp.nombre} value={esp.nombre}>
-                                        {esp.nombre}
+                                        {esp.nombre} ({esp.abrev})
                                     </option>
                                 ))}
                             </select>
