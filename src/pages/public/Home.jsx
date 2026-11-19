@@ -359,11 +359,34 @@ export default function Home() {
     },
   ];
 
+  const resolverMetrica = (clave, respaldo) => {
+    const val = cfgWeb?.metricas_anuales?.[clave];
+    if (
+      typeof val === 'number' ||
+      (typeof val === 'string' && val.trim() !== '' && !Number.isNaN(Number(val)))
+    ) {
+      return Number(val);
+    }
+    return respaldo;
+  };
+
   const metricasAnuales = [
-    { label: `BÚSQUEDAS ${anioActual}`, valor: contadoresAnuales.busquedas },
-    { label: `DESPLIEGUES ${anioActual}`, valor: contadoresAnuales.despliegues },
-    { label: `EMERGENCIAS ${anioActual}`, valor: contadoresAnuales.emergencias },
-    { label: `SIMULACROS ${anioActual}`, valor: contadoresAnuales.simulacros },
+    {
+      label: `BÚSQUEDAS ${anioActual}`,
+      valor: resolverMetrica('busquedas', contadoresAnuales.busquedas),
+    },
+    {
+      label: `DESPLIEGUES ${anioActual}`,
+      valor: resolverMetrica('despliegues', contadoresAnuales.despliegues),
+    },
+    {
+      label: `EMERGENCIAS ${anioActual}`,
+      valor: resolverMetrica('emergencias', contadoresAnuales.emergencias),
+    },
+    {
+      label: `SIMULACROS ${anioActual}`,
+      valor: resolverMetrica('simulacros', contadoresAnuales.simulacros),
+    },
   ];
 
   return (

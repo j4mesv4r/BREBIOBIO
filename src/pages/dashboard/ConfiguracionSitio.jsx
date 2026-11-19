@@ -92,6 +92,12 @@ export default function ConfiguracionSitio() {
   const [contenidos, setContenidos] = useState(CONTENIDOS_POR_DEFECTO);
   const [memorias, setMemorias] = useState(MEMORIAS_POR_DEFECTO);
   const [galeriaFotos, setGaleriaFotos] = useState(GALERIA_FOTOS_POR_DEFECTO);
+  const [metricasAnuales, setMetricasAnuales] = useState({
+    busquedas: '',
+    despliegues: '',
+    emergencias: '',
+    simulacros: '',
+  });
   const [nuevaFotoGaleria, setNuevaFotoGaleria] = useState({
     url: '',
     titulo: '',
@@ -132,6 +138,30 @@ export default function ConfiguracionSitio() {
           }
           if (Array.isArray(data.contenidos_json.galeria_fotos)) {
             setGaleriaFotos(data.contenidos_json.galeria_fotos);
+          }
+          if (
+            data.contenidos_json.metricas_anuales &&
+            typeof data.contenidos_json.metricas_anuales === 'object'
+          ) {
+            const m = data.contenidos_json.metricas_anuales;
+            setMetricasAnuales({
+              busquedas:
+                m.busquedas !== null && m.busquedas !== undefined
+                  ? String(m.busquedas)
+                  : '',
+              despliegues:
+                m.despliegues !== null && m.despliegues !== undefined
+                  ? String(m.despliegues)
+                  : '',
+              emergencias:
+                m.emergencias !== null && m.emergencias !== undefined
+                  ? String(m.emergencias)
+                  : '',
+              simulacros:
+                m.simulacros !== null && m.simulacros !== undefined
+                  ? String(m.simulacros)
+                  : '',
+            });
           }
         }
       }
@@ -331,6 +361,24 @@ export default function ConfiguracionSitio() {
             ...contenidos,
             memorias,
             galeria_fotos: galeriaFotos,
+            metricas_anuales: {
+              busquedas:
+                metricasAnuales.busquedas !== ''
+                  ? Number(metricasAnuales.busquedas)
+                  : null,
+              despliegues:
+                metricasAnuales.despliegues !== ''
+                  ? Number(metricasAnuales.despliegues)
+                  : null,
+              emergencias:
+                metricasAnuales.emergencias !== ''
+                  ? Number(metricasAnuales.emergencias)
+                  : null,
+              simulacros:
+                metricasAnuales.simulacros !== ''
+                  ? Number(metricasAnuales.simulacros)
+                  : null,
+            },
           },
           updated_at: new Date().toISOString(),
         },
@@ -735,6 +783,40 @@ export default function ConfiguracionSitio() {
                           <Trash2 size={13} />
                         </button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Métricas Anuales Manuales */}
+              <div className="space-y-3 border-t border-neutral-200 pt-5">
+                <h3 className="text-xs font-black uppercase tracking-wider text-neutral-900">
+                  Métricas Anuales en Portada (Opcional: deja vacío para usar conteo automático)
+                </h3>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  {[
+                    { key: 'busquedas', label: 'Búsquedas' },
+                    { key: 'despliegues', label: 'Despliegues' },
+                    { key: 'emergencias', label: 'Emergencias' },
+                    { key: 'simulacros', label: 'Simulacros' },
+                  ].map((item) => (
+                    <div key={item.key}>
+                      <label className="mb-1 block text-xs font-black uppercase text-neutral-700">
+                        {item.label}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={metricasAnuales[item.key]}
+                        onChange={(e) =>
+                          setMetricasAnuales({
+                            ...metricasAnuales,
+                            [item.key]: e.target.value,
+                          })
+                        }
+                        placeholder="Auto"
+                        className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm font-bold"
+                      />
                     </div>
                   ))}
                 </div>
