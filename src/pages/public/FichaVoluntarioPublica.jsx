@@ -111,6 +111,21 @@ export default function FichaVoluntarioPublica() {
       }
 
       if (!perfil) {
+        const rutBuscado = normalizarRutSinFormato(idLimpio);
+        if (rutBuscado.length >= 7) {
+          const { data: candidatos } = await supabase
+            .from('perfiles')
+            .select('*')
+            .not('rut', 'is', null);
+
+          perfil =
+            (candidatos || []).find(
+              (p) => normalizarRutSinFormato(p.rut) === rutBuscado
+            ) || null;
+        }
+      }
+
+      if (!perfil) {
         setVoluntario(null);
         setCertificados([]);
         setLoading(false);

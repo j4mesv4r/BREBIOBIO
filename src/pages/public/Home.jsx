@@ -215,7 +215,8 @@ const MapaRelieveBiobio = () => (
 );
 
 export default function Home() {
-  const [codigoVerificacion, setCodigoVerificacion] = useState('');
+  const [tipoBusqueda, setTipoBusqueda] = useState('bre');
+  const [codigoVerificacion, setCodigoVerificacion] = useState('BRE-');
   const navigate = useNavigate();
   const anioActual = new Date().getFullYear();
   const [cfgWeb, setCfgWeb] = useState({});
@@ -284,10 +285,35 @@ export default function Home() {
     cargarActividadAnual();
   }, [anioActual]);
 
+  const formatearRutInput = (valor = '') => {
+    const limpio = valor.replace(/[^0-9kK]/g, '').toUpperCase().slice(0, 9);
+    if (limpio.length <= 1) return limpio;
+    const cuerpo = limpio.slice(0, -1);
+    const dv = limpio.slice(-1);
+    const cuerpoFormateado = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${cuerpoFormateado}-${dv}`;
+  };
+
+  const handleCambiarTipoBusqueda = (nuevoTipo) => {
+    setTipoBusqueda(nuevoTipo);
+    setCodigoVerificacion(nuevoTipo === 'bre' ? 'BRE-' : '');
+  };
+
+  const handleCambioInputVerificacion = (e) => {
+    const raw = e.target.value;
+    if (tipoBusqueda === 'bre') {
+      const sinPrefijo = raw.toUpperCase().replace(/^BRE-?/i, '');
+      setCodigoVerificacion(`BRE-${sinPrefijo}`);
+    } else {
+      setCodigoVerificacion(formatearRutInput(raw));
+    }
+  };
+
   const handleVerificarCredencial = (e) => {
     e.preventDefault();
-    if (!codigoVerificacion.trim()) return;
-    navigate(`/voluntario/${encodeURIComponent(codigoVerificacion.trim())}`);
+    const valor = codigoVerificacion.trim();
+    if (!valor || (tipoBusqueda === 'bre' && valor === 'BRE-')) return;
+    navigate(`/voluntario/${encodeURIComponent(valor)}`);
   };
 
   const especialidades = [
@@ -477,11 +503,37 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCambiarTipoBusqueda('bre')}
+                      className={`rounded-lg px-3 py-1 text-[11px] font-black uppercase tracking-wider transition-colors ${
+                        tipoBusqueda === 'bre'
+                          ? 'bg-[#0A0A0A] text-[#F2B632]'
+                          : 'border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50'
+                      }`}
+                    >
+                      Código BRE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCambiarTipoBusqueda('rut')}
+                      className={`rounded-lg px-3 py-1 text-[11px] font-black uppercase tracking-wider transition-colors ${
+                        tipoBusqueda === 'rut'
+                          ? 'bg-[#0A0A0A] text-[#F2B632]'
+                          : 'border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50'
+                      }`}
+                    >
+                      RUT
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       value={codigoVerificacion}
-                      onChange={(e) => setCodigoVerificacion(e.target.value)}
-                      placeholder="RUT o ID (Ej: BRE-0001)"
+                      onChange={handleCambioInputVerificacion}
+                      placeholder={
+                        tipoBusqueda === 'bre' ? 'BRE-0001' : '12.345.678-9'
+                      }
                       className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-xs font-bold text-[#0A0A0A] outline-none shadow-[inset_0_2px_5px_rgba(0,0,0,0.06)] placeholder:text-neutral-400 focus:border-[#D90429] focus:ring-2 focus:ring-[#D90429]/30"
                     />
                     <button
