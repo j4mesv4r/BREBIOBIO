@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import {
   CheckCircle,
   XCircle,
@@ -23,6 +24,7 @@ import {
   Link2,
   Unlink,
   KeyRound,
+  CreditCard,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -118,6 +120,7 @@ export default function GestionDirectorio() {
   });
   const [claveInputs, setClaveInputs] = useState({});
   const [infoExito, setInfoExito] = useState('');
+  const [descargandoCredKey, setDescargandoCredKey] = useState('');
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -353,6 +356,341 @@ export default function GestionDirectorio() {
     setInfoExito(
       `Clave provisoria asignada a ${perfil.nombre_completo || perfil.email}: ${claveFinal} (requiere cambio al ingresar).`
     );
+  };
+
+  const formatearRutCredencial = (valor = '') => {
+    const limpio = valor.replace(/[^0-9kK]/g, '').toUpperCase();
+    if (limpio.length <= 1) return limpio;
+    const cuerpo = limpio.slice(0, -1);
+    const dv = limpio.slice(-1);
+    return `${cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${dv}`;
+  };
+
+  const resolverTituloFranjaCredencial = (perfil) => {
+    const r = (perfil?.rol || 'voluntario').toLowerCase();
+    const cargos = Array.isArray(perfil?.cargos_operativos)
+      ? perfil.cargos_operativos.map((c) => c.toLowerCase())
+      : [];
+    const esMujer = perfil?.genero === 'femenino';
+
+    if (cargos.includes('do')) return 'DIRECTOR OPERATIVO';
+    if (r === 'director') return 'DIRECTORIO';
+    if (r === 'superadmin' || r === 'voluntario') {
+      return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
+    }
+    return r.toUpperCase();
+  };
+
+  const resolverFuncionAreaCredencial = (perfil) => {
+    const r = (perfil?.rol || 'voluntario').toLowerCase();
+    const cargos = Array.isArray(perfil?.cargos_operativos)
+      ? perfil.cargos_operativos.map((c) => c.toLowerCase())
+      : [];
+
+    const etiquetasCargo = {
+      tesorero: 'TESORERO',
+      secretario: 'SECRETARÍA',
+      do: 'DIRECCIÓN OPERATIVA',
+      dos: 'DIRECCIÓN OPERATIVA',
+      jc: 'JEFE DE CUADRILLA',
+      lem: 'PREHOSPITALARIO',
+      prehospitalario: 'PREHOSPITALARIO',
+      instructor: 'INSTRUCCIÓN',
+      operativo: 'OPERATIVO',
+    };
+
+    const cargosMapeados = cargos
+      .map((c) => etiquetasCargo[c])
+      .filter(Boolean);
+
+    if (cargosMapeados.length > 0) {
+      return Array.from(new Set(cargosMapeados)).join(' · ');
+    }
+    if (r === 'superadmin') return 'OPERATIVO - ADMINISTRATIVO';
+    if (r === 'director') return 'DIRECTORIO';
+    return 'BÚSQUEDA Y RESCATE';
+  };
+
+  const formatearEspecialidadesParaCredencial = (lista = []) => {
+    const limpias = Array.isArray(lista) ? lista.filter(Boolean) : [];
+    if (limpias.length === 0) {
+      return 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
+    }
+    if (limpias.length > 6) {
+      return limpias
+        .map((esp) => {
+          const parentesis = esp.match(/\(([^)]+)\)/);
+          if (parentesis?.[1]) {
+            return parentesis[1].trim().toUpperCase().slice(0, 10);
+          }
+          const palabras = esp
+            .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s/]/g, '')
+            .split(/\s+/)
+            .filter((p) => p.length > 2);
+          if (palabras.length === 0) return esp.toUpperCase().slice(0, 8);
+          if (palabras.length === 1) return palabras[0].toUpperCase().slice(0, 8);
+          return palabras
+            .slice(0, 3)
+            .map((p) => p[0].toUpperCase())
+            .join('');
+        })
+        .filter(Boolean)
+        .join(' · ')
+        .toUpperCase();
+    }
+    return limpias.join(' · ').toUpperCase();
+  };
+
+  const dibujarTextoAjustadoEnArea = (ctx, texto, x, y, w, h, tamanoInicial = 18) => {
+    let fontSize = tamanoInicial;
+    let lineas = [];
+    let altoLinea = fontSize + 4;
+
+    while (fontSize >= 10) {
+      ctx.font = `800 ${fontSize}px sans-serif`;
+      const palabras = (texto || '').trim().split(/\s+/).filter(Boolean);
+      lineas = [];
+      if (palabras.length === 0) {
+        lineas = [''];
+      } else {
+        let actual = palabras[0];
+        for (let i = 1; i < palabras.length; i++) {
+          const prueba = `${actual} ${palabras[i]}`;
+          if (ctx.measureText(prueba).width <= w - 12) {
+            actual = prueba;
+          } else {
+            lineas.push(actual);
+            actual = palabras[i];
+          }
+        }
+        lineas.push(actual);
+      }
+      altoLinea = fontSize + 4;
+      if (lineas.length * altoLinea <= h - 6) break;
+      fontSize -= 1;
+    }
+
+    const totalHeight = lineas.length * altoLinea;
+    const startY =
+      y + Math.max(altoLinea * 0.85, (h - totalHeight) / 2 + altoLinea * 0.75);
+
+    lineas.forEach((linea, idx) => {
+      ctx.fillText(linea, x + 6, startY + idx * altoLinea, w - 12);
+    });
+  };
+
+  const cargarImagenCanvas = (src, fallbackSrc) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        if (fallbackSrc) {
+          const fb = new Image();
+          fb.onload = () => resolve(fb);
+          fb.onerror = () => resolve(null);
+          fb.src = fallbackSrc;
+        } else {
+          resolve(null);
+        }
+      };
+      img.src = src;
+    });
+
+  const descargarCredencialMiembro = async (miembro, lado) => {
+    const key = `${miembro.id}-${lado}`;
+    setDescargandoCredKey(key);
+    setAlerta('');
+
+    try {
+      const W = 1012;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const rutForm = formatearRutCredencial(miembro.rut || '');
+      const codigoMostrar =
+        miembro.codigo_credencial ||
+        (rutForm ? `BRE-${rutForm.replace(/[^0-9]/g, '').slice(0, 6)}` : 'BRE-000000');
+
+      if (lado === 'frente') {
+        const imgBaseFrente =
+          (await cargarImagenCanvas('/credencial-frente.jpg')) ||
+          (await cargarImagenCanvas('/credencial-frente.png'));
+        const ratio =
+          imgBaseFrente && imgBaseFrente.naturalWidth
+            ? imgBaseFrente.naturalHeight / imgBaseFrente.naturalWidth
+            : 638 / 1012;
+        const HF = Math.round(W * ratio);
+        canvas.width = W;
+        canvas.height = HF;
+
+        if (imgBaseFrente) ctx.drawImage(imgBaseFrente, 0, 0, W, HF);
+
+        const genero = miembro.genero === 'femenino' ? 'femenino' : 'masculino';
+        const avatarPng =
+          genero === 'femenino' ? '/avatar-femenino.png' : '/avatar-masculino.png';
+        const avatarJpg =
+          genero === 'femenino' ? '/avatar-femenino.jpg' : '/avatar-masculino.jpg';
+        const imgFoto = miembro.foto_url
+          ? await cargarImagenCanvas(miembro.foto_url, avatarPng)
+          : (await cargarImagenCanvas(avatarPng)) ||
+            (await cargarImagenCanvas(avatarJpg));
+
+        if (imgFoto) {
+          const boxX = W * 0.0355;
+          const boxY = HF * 0.0797;
+          const boxW = W * 0.3375;
+          const boxH = HF * 0.698;
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+          ctx.clip();
+
+          const ratioImg = imgFoto.width / imgFoto.height;
+          const ratioBox = boxW / boxH;
+          let drawW = boxW;
+          let drawH = boxH;
+          let drawX = boxX;
+          let drawY = boxY;
+          if (ratioImg > ratioBox) {
+            drawH = boxH;
+            drawW = boxH * ratioImg;
+            drawX = boxX - (drawW - boxW) / 2;
+          } else {
+            drawW = boxW;
+            drawH = boxW / ratioImg;
+            drawY = boxY - (drawH - boxH) / 2;
+          }
+          ctx.drawImage(imgFoto, drawX, drawY, drawW, drawH);
+          ctx.restore();
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'left';
+        ctx.font = '900 42px sans-serif';
+        ctx.fillText(resolverTituloFranjaCredencial(miembro), 412, HF * 0.388, 430);
+
+        ctx.fillStyle = '#111827';
+        ctx.font = '900 28px sans-serif';
+        ctx.fillText(
+          (miembro.nombre_completo || 'NOMBRE COMPLETO').toUpperCase(),
+          420,
+          HF * 0.54,
+          545
+        );
+
+        ctx.font = '900 26px sans-serif';
+        ctx.fillText(rutForm || '12.345.678-9', 420, HF * 0.655);
+
+        ctx.font = '900 22px sans-serif';
+        ctx.fillText(resolverFuncionAreaCredencial(miembro), 420, HF * 0.787, 545);
+
+        const fechaEmision = miembro.creado_en
+          ? new Date(miembro.creado_en)
+          : new Date();
+        let fechaVigencia;
+        if (miembro.fecha_vigencia_credencial) {
+          fechaVigencia = new Date(
+            `${String(miembro.fecha_vigencia_credencial).slice(0, 10)}T12:00:00`
+          );
+        } else {
+          fechaVigencia = new Date(fechaEmision);
+          fechaVigencia.setFullYear(fechaVigencia.getFullYear() + 2);
+        }
+        const fmtFecha = (d) =>
+          `${String(d.getDate()).padStart(2, '0')}-${String(
+            d.getMonth() + 1
+          ).padStart(2, '0')}-${d.getFullYear()}`;
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '900 28px sans-serif';
+        ctx.fillText(codigoMostrar, 92, HF * 0.922);
+        ctx.font = '800 23px sans-serif';
+        ctx.fillText(fmtFecha(fechaEmision), 395, HF * 0.922);
+        ctx.fillText(fmtFecha(fechaVigencia), 585, HF * 0.922);
+      } else {
+        const imgBaseReverso =
+          (await cargarImagenCanvas('/credencial-reverso.jpg')) ||
+          (await cargarImagenCanvas('/credencial-reverso.png'));
+        const ratio =
+          imgBaseReverso && imgBaseReverso.naturalWidth
+            ? imgBaseReverso.naturalHeight / imgBaseReverso.naturalWidth
+            : 638 / 1012;
+        const HR = Math.round(W * ratio);
+        canvas.width = W;
+        canvas.height = HR;
+
+        if (imgBaseReverso) ctx.drawImage(imgBaseReverso, 0, 0, W, HR);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.font = '900 38px sans-serif';
+        const gs =
+          miembro.tipo_sangre && miembro.tipo_sangre !== 'No especificado'
+            ? miembro.tipo_sangre
+            : 'N/E';
+        ctx.fillText(gs, 875, HR * 0.207);
+
+        const espLista = Array.isArray(miembro.especialidades_validadas)
+          ? miembro.especialidades_validadas
+          : Array.isArray(miembro.especialidades)
+            ? miembro.especialidades
+            : [];
+        ctx.fillStyle = '#111827';
+        ctx.textAlign = 'left';
+        dibujarTextoAjustadoEnArea(
+          ctx,
+          formatearEspecialidadesParaCredencial(espLista),
+          W * 0.1497,
+          HR * 0.4049,
+          W * 0.4371,
+          HR * 0.1166,
+          17
+        );
+
+        dibujarTextoAjustadoEnArea(
+          ctx,
+          (miembro.alergias || 'SIN ANTECEDENTES RELEVANTES').toUpperCase(),
+          W * 0.1526,
+          HR * 0.6243,
+          W * 0.3482,
+          HR * 0.1335,
+          16
+        );
+
+        const urlVerif = `${window.location.origin}/voluntario/${encodeURIComponent(
+          codigoMostrar
+        )}`;
+        const qrDataUrl = await QRCode.toDataURL(urlVerif, {
+          width: 260,
+          margin: 1,
+          color: { dark: '#0A0A0A', light: '#FFFFFF' },
+        });
+        const imgQr = await cargarImagenCanvas(qrDataUrl);
+        if (imgQr) {
+          const qrBoxX = W * 0.699;
+          const qrBoxY = HR * 0.296;
+          const qrBoxW = W * 0.2621;
+          const qrBoxH = HR * 0.4035;
+          const qrSize = Math.min(qrBoxW, qrBoxH) * 0.86;
+          ctx.drawImage(
+            imgQr,
+            qrBoxX + (qrBoxW - qrSize) / 2,
+            qrBoxY + (qrBoxH - qrSize) / 2,
+            qrSize,
+            qrSize
+          );
+        }
+      }
+
+      const enlace = document.createElement('a');
+      enlace.download = `Credencial_${lado.toUpperCase()}_${codigoMostrar}.png`;
+      enlace.href = canvas.toDataURL('image/png');
+      enlace.click();
+    } catch (err) {
+      setAlerta(err.message || 'No se pudo generar la credencial.');
+    } finally {
+      setDescargandoCredKey('');
+    }
   };
 
   const validarCertificado = async (cert, estado) => {
@@ -798,19 +1136,17 @@ export default function GestionDirectorio() {
                 {m.estado_validacion !== 'aprobado' && (
                   <button
                     onClick={() => validarMiembro(m, 'aprobado', 'postulante')}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-black uppercase text-emerald-800 hover:bg-emerald-100"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-emerald-700"
                   >
                     <CheckCircle size={15} strokeWidth={2.5} /> Autorizar
-                    Postulante
                   </button>
                 )}
 
                 <button
                   onClick={() => validarMiembro(m, 'aprobado', 'voluntario')}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-700 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-blue-800"
                 >
-                  <UserCheck size={15} strokeWidth={2.5} /> Promover a
-                  Voluntario
+                  <UserCheck size={15} strokeWidth={2.5} /> Promover
                 </button>
 
                 {m.estado_validacion === 'pendiente' && (
@@ -843,11 +1179,31 @@ export default function GestionDirectorio() {
                 {m.estado_validacion !== 'aprobado' && (
                   <button
                     onClick={() => validarMiembro(m, 'aprobado')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-emerald-700"
                   >
                     <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  disabled={descargandoCredKey === `${m.id}-frente`}
+                  onClick={() => descargarCredencialMiembro(m, 'frente')}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  <CreditCard size={14} />{' '}
+                  {descargandoCredKey === `${m.id}-frente` ? '...' : 'Frente'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={descargandoCredKey === `${m.id}-reverso`}
+                  onClick={() => descargarCredencialMiembro(m, 'reverso')}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-[#F2B632] hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  <CreditCard size={14} />{' '}
+                  {descargandoCredKey === `${m.id}-reverso` ? '...' : 'Reverso'}
+                </button>
               </>
             )}
 
@@ -855,10 +1211,11 @@ export default function GestionDirectorio() {
               type="button"
               disabled={!puedeEditarVisibilidad}
               onClick={() => toggleMostrarAntecedentes(m)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black uppercase disabled:opacity-50 ${antecedentesPublicosActivos
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                  : 'border-neutral-300 bg-neutral-100 text-neutral-600'
-                }`}
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black uppercase text-white disabled:opacity-50 ${
+                antecedentesPublicosActivos
+                  ? 'bg-teal-700 hover:bg-teal-800'
+                  : 'bg-neutral-700 hover:bg-neutral-800'
+              }`}
             >
               {antecedentesPublicosActivos ? (
                 <>
@@ -874,19 +1231,19 @@ export default function GestionDirectorio() {
             <button
               type="button"
               onClick={() => toggleVinculacionCuenta(m)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black uppercase ${
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black uppercase text-white ${
                 m.cuenta_vinculada
-                  ? 'border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100'
-                  : 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  ? 'bg-orange-600 hover:bg-orange-700'
+                  : 'bg-emerald-600 hover:bg-emerald-700'
               }`}
             >
               {m.cuenta_vinculada ? (
                 <>
-                  <Unlink size={14} /> Desvincular Cuenta
+                  <Unlink size={14} /> Desvincular
                 </>
               ) : (
                 <>
-                  <Link2 size={14} /> Vincular Cuenta
+                  <Link2 size={14} /> Vincular
                 </>
               )}
             </button>
