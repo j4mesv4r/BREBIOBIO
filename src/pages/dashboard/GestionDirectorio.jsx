@@ -27,6 +27,7 @@ import {
   CreditCard,
   Edit3,
   Save,
+  X,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -141,6 +142,81 @@ const obtenerEtiquetaCargoGenero = (cargoObj, genero) => {
     : cargoObj.labelMasculino || cargoObj.label;
 };
 
+const ESPECIALIDADES_CATALOGO = [
+  { nombre: 'Búsqueda y Rescate Agreste (GSAR)', abrev: 'GSAR' },
+  { nombre: 'Rescate Urbano (USAR / INSARAG)', abrev: 'USAR' },
+  { nombre: 'Rescate Vertical y Cuerdas', abrev: 'R. VERT' },
+  { nombre: 'Rescate en Aguas Rápidas e Inundaciones (SRT)', abrev: 'SRT/ACU' },
+  { nombre: 'Buceo de Búsqueda y Recuperación', abrev: 'BUCEO' },
+  { nombre: 'Rescate en Montaña y Media Montaña', abrev: 'MONTAÑA' },
+  { nombre: 'Rescate Vehicular y Extricación', abrev: 'R. VEH' },
+  { nombre: 'Atención Prehospitalaria / Triage START', abrev: 'PREHOSP' },
+  { nombre: 'Primeros Auxilios en Zonas Remotas (WFR)', abrev: 'WFR' },
+  { nombre: 'Operador RPAS / Drone Táctico', abrev: 'RPAS/DRONE' },
+  { nombre: 'Unidad Canina de Búsqueda (K9)', abrev: 'K9' },
+  { nombre: 'Cartografía, SIG y Navegación GPS', abrev: 'SIG/GPS' },
+  { nombre: 'Telecomunicaciones VHF / UHF / HF', abrev: 'TELECO' },
+  { nombre: 'Sistema de Comando de Incidentes (SCI)', abrev: 'SCI' },
+  { nombre: 'Materiales Peligrosos (HAZMAT)', abrev: 'HAZMAT' },
+  { nombre: 'Gestión Logística y Abastecimiento', abrev: 'LOGÍST' },
+  { nombre: 'Administración y Gestión de Proyectos', abrev: 'ADMIN' },
+  { nombre: 'Tesorería, Contabilidad y Rendiciones', abrev: 'FINANZAS' },
+  { nombre: 'Instrucción y Capacitación Operativa', abrev: 'INSTRUC' },
+  { nombre: 'Apoyo Psicosocial en Emergencias', abrev: 'PSICOSOC' },
+  { nombre: 'Incendios Forestales y Control de Fuego', abrev: 'IF/FUEGO' },
+  { nombre: 'Evaluación de Daños y Análisis de Necesidades (EDAN)', abrev: 'EDAN' },
+  { nombre: 'Soporte Vital Básico (BLS / RCP / DEA)', abrev: 'BLS/RCP' },
+  { nombre: 'Soporte Vital Avanzado en Trauma (PHTLS)', abrev: 'PHTLS' },
+  { nombre: 'Operación de Vehículos Todoterreno (4x4 / UTV)', abrev: '4X4/UTV' },
+  { nombre: 'Operación de Embarcaciones y Rescate Costero', abrev: 'MARÍTIMO' },
+  { nombre: 'Rescate en Estructuras Colapsadas', abrev: 'COLAPSO' },
+  { nombre: 'Rescate en Espacios Confinados', abrev: 'CONFINADO' },
+  { nombre: 'Enlace Interinstitucional y SENAPRED', abrev: 'ENLACE' },
+  { nombre: 'Prensa, Comunicaciones y Vocería en Crisis', abrev: 'COMUNIC' },
+  { nombre: 'Auditoría, Cumplimiento y Transparencia', abrev: 'AUDITORÍA' },
+  { nombre: 'Bienestar y Cuidado de Equipos Operativos', abrev: 'BIENESTAR' },
+  { nombre: 'Tecnologías de la Información y Soporte (TI)', abrev: 'TI' },
+  { nombre: 'Analista de Datos e Inteligencia Operativa', abrev: 'ANALISTA' },
+  { nombre: 'Desarrollo de Software y Plataformas Web', abrev: 'DEV/TI' },
+  { nombre: 'Redes, Infraestructura y Conectividad Satelital', abrev: 'REDES/SAT' },
+  { nombre: 'Ciberseguridad y Protección de Datos', abrev: 'CIBERSEG' },
+  { nombre: 'Electrónica, Energía Solar y Respaldo Eléctrico', abrev: 'ELECTRÓN' },
+  { nombre: 'Análisis Meteorológico y Riesgos Naturales', abrev: 'METEO' },
+  { nombre: 'Planificación Estratégica y Gestión de Riesgos', abrev: 'PLANIF' },
+  { nombre: 'Asesoría Jurídica y Normativa Institucional', abrev: 'JURÍDICO' },
+  { nombre: 'Prevención de Riesgos y Seguridad Operacional', abrev: 'PREV. RIESG' },
+];
+
+function obtenerAbreviaturaEspecialidad(nombreEsp = '') {
+  const limpio = (nombreEsp || '').trim();
+  if (!limpio) return '';
+
+  const matchCatalogo = ESPECIALIDADES_CATALOGO.find(
+    (item) =>
+      item.nombre.toLowerCase() === limpio.toLowerCase() ||
+      item.abrev.toLowerCase() === limpio.toLowerCase()
+  );
+  if (matchCatalogo) return matchCatalogo.abrev;
+
+  const parentesis = limpio.match(/\(([^)]+)\)/);
+  if (parentesis?.[1]) {
+    return parentesis[1].trim().toUpperCase().slice(0, 10);
+  }
+
+  const palabras = limpio
+    .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s/]/g, '')
+    .split(/\s+/)
+    .filter((p) => p.length > 2);
+
+  if (palabras.length === 0) return limpio.toUpperCase().slice(0, 8);
+  if (palabras.length === 1) return palabras[0].toUpperCase().slice(0, 8);
+
+  return palabras
+    .slice(0, 3)
+    .map((p) => p[0].toUpperCase())
+    .join('');
+}
+
 const CAMPOS_VISIBILIDAD = [
   { key: 'foto_url', label: 'Fotografía' },
   { key: 'rut', label: 'RUT' },
@@ -186,9 +262,11 @@ export default function GestionDirectorio() {
     alergias: '',
     contacto_emergencia_nombre: '',
     contacto_emergencia_telefono: '',
-    especialidades: '',
+    especialidades: [],
     fecha_vigencia_credencial: '',
   });
+  const [inputEspFicha, setInputEspFicha] = useState('');
+  const [mostrarSugerenciasEsp, setMostrarSugerenciasEsp] = useState(false);
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -316,12 +394,63 @@ export default function GestionDirectorio() {
       alergias: miembro.alergias || '',
       contacto_emergencia_nombre: miembro.contacto_emergencia_nombre || '',
       contacto_emergencia_telefono: miembro.contacto_emergencia_telefono || '',
-      especialidades: listaEsp.join(', '),
+      especialidades: listaEsp,
       fecha_vigencia_credencial: miembro.fecha_vigencia_credencial
         ? String(miembro.fecha_vigencia_credencial).slice(0, 10)
         : '',
     });
+    setInputEspFicha('');
+    setMostrarSugerenciasEsp(false);
   };
+
+  const agregarEspecialidadFicha = (valorRaw) => {
+    const limpio = valorRaw.replace(/,/g, '').trim();
+    if (!limpio) return;
+    setFichaForm((prev) => {
+      const lista = Array.isArray(prev.especialidades) ? prev.especialidades : [];
+      const existe = lista.some(
+        (e) => e.toLowerCase() === limpio.toLowerCase()
+      );
+      if (existe) return prev;
+      return { ...prev, especialidades: [...lista, limpio] };
+    });
+    setInputEspFicha('');
+    setMostrarSugerenciasEsp(false);
+  };
+
+  const eliminarEspecialidadFicha = (item) => {
+    setFichaForm((prev) => ({
+      ...prev,
+      especialidades: (prev.especialidades || []).filter((e) => e !== item),
+    }));
+  };
+
+  const handleKeyDownEspecialidadFicha = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      if (inputEspFicha.trim().length > 0) {
+        e.preventDefault();
+        agregarEspecialidadFicha(inputEspFicha);
+      }
+    } else if (
+      e.key === 'Backspace' &&
+      inputEspFicha === '' &&
+      Array.isArray(fichaForm.especialidades) &&
+      fichaForm.especialidades.length > 0
+    ) {
+      eliminarEspecialidadFicha(
+        fichaForm.especialidades[fichaForm.especialidades.length - 1]
+      );
+    }
+  };
+
+  const sugerenciasEspFiltradas = ESPECIALIDADES_CATALOGO.filter(
+    (s) =>
+      !(fichaForm.especialidades || []).some(
+        (sel) => sel.toLowerCase() === s.nombre.toLowerCase()
+      ) &&
+      (s.nombre.toLowerCase().includes(inputEspFicha.toLowerCase()) ||
+        s.abrev.toLowerCase().includes(inputEspFicha.toLowerCase()))
+  );
 
   const guardarEdicionFicha = async (e, miembroId) => {
     e.preventDefault();
@@ -329,10 +458,9 @@ export default function GestionDirectorio() {
     setAlerta('');
     setInfoExito('');
 
-    const especialidadesLista = fichaForm.especialidades
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const especialidadesLista = Array.isArray(fichaForm.especialidades)
+      ? fichaForm.especialidades.map((s) => s.trim()).filter(Boolean)
+      : [];
 
     const payload = {
       nombre_completo: fichaForm.nombre_completo.trim(),
@@ -1650,22 +1778,67 @@ export default function GestionDirectorio() {
                     />
                   </div>
 
-                  <div className="sm:col-span-3">
+                  <div className="relative sm:col-span-3">
                     <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
-                      Especialidades (separadas por coma)
+                      Especialidades Operativas / Técnicas
                     </label>
-                    <input
-                      type="text"
-                      value={fichaForm.especialidades}
-                      onChange={(e) =>
-                        setFichaForm({
-                          ...fichaForm,
-                          especialidades: e.target.value,
-                        })
-                      }
-                      placeholder="Ej. Búsqueda y Rescate Agreste (GSAR), Soporte Vital Básico"
-                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
-                    />
+                    <div className="flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 focus-within:border-[#0A0A0A]">
+                      {(fichaForm.especialidades || []).map((esp) => {
+                        const abrev = obtenerAbreviaturaEspecialidad(esp);
+                        return (
+                          <span
+                            key={esp}
+                            className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2.5 py-1 text-xs font-black text-[#F2B632]"
+                          >
+                            <span>
+                              {(fichaForm.especialidades || []).length > 6
+                                ? `${abrev} · ${esp}`
+                                : esp}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => eliminarEspecialidadFicha(esp)}
+                              className="rounded-full p-0.5 text-neutral-400 hover:bg-white/15 hover:text-white"
+                            >
+                              <X size={12} strokeWidth={3} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      <input
+                        type="text"
+                        value={inputEspFicha}
+                        onFocus={() => setMostrarSugerenciasEsp(true)}
+                        onBlur={() =>
+                          setTimeout(() => setMostrarSugerenciasEsp(false), 180)
+                        }
+                        onChange={(e) => {
+                          setInputEspFicha(e.target.value);
+                          setMostrarSugerenciasEsp(true);
+                        }}
+                        onKeyDown={handleKeyDownEspecialidadFicha}
+                        placeholder="Selecciona del catálogo (TI, GSAR, etc.) o escribe manual y Enter..."
+                        className="min-w-[200px] flex-1 bg-transparent text-xs font-semibold outline-none"
+                      />
+                    </div>
+
+                    {mostrarSugerenciasEsp && sugerenciasEspFiltradas.length > 0 && (
+                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                        {sugerenciasEspFiltradas.map((sug) => (
+                          <button
+                            key={sug.nombre}
+                            type="button"
+                            onMouseDown={() => agregarEspecialidadFicha(sug.nombre)}
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-800 hover:bg-neutral-100"
+                          >
+                            <span>{sug.nombre}</span>
+                            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-black text-neutral-600">
+                              {sug.abrev}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
