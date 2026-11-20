@@ -32,36 +32,55 @@ import { useAuth } from '../../context/AuthContext';
 
 const CATALOGO_CARGOS = [
   {
+    key: 'director',
+    label: 'Director/a',
+    labelMasculino: 'Director',
+    labelFemenino: 'Directora',
+    corto: 'DIR',
+    unico: true,
+    descripcion: 'Único (1 en ONG) · Dirección ejecutiva y representación institucional',
+  },
+  {
     key: 'secretario',
-    label: 'Secretario',
+    label: 'Secretario/a',
+    labelMasculino: 'Secretario',
+    labelFemenino: 'Secretaria',
     corto: 'SEC',
     unico: true,
     descripcion: 'Único (1 en ONG) · Configura visibilidad pública y actas',
   },
   {
     key: 'tesorero',
-    label: 'Tesorero',
+    label: 'Tesorero/a',
+    labelMasculino: 'Tesorero',
+    labelFemenino: 'Tesorera',
     corto: 'TES',
     unico: true,
     descripcion: 'Único (1 en ONG) · Gestiona Tesorería y respaldos',
   },
   {
     key: 'do',
-    label: 'Director Operativo',
+    label: 'Director/a Operativo/a',
+    labelMasculino: 'Director Operativo',
+    labelFemenino: 'Directora Operativa',
     corto: 'DO',
-    unico: false,
-    descripcion: 'Mando operativo · Designa DOs, JC, LEM, Instructor y Puesto de Mando',
+    unico: true,
+    descripcion: 'Único (1 en ONG) · Mando operativo en Directorio y terreno',
   },
   {
     key: 'dos',
-    label: 'Director Op. Suplente',
+    label: 'Director/a Op. Suplente',
+    labelMasculino: 'Director Op. Suplente',
+    labelFemenino: 'Directora Op. Suplente',
     corto: 'DOs',
     unico: false,
     descripcion: 'Designado por SA, DG o DO',
   },
   {
     key: 'jc',
-    label: 'Jefe de Cuadrilla',
+    label: 'Jefe/a de Cuadrilla',
+    labelMasculino: 'Jefe de Cuadrilla',
+    labelFemenino: 'Jefa de Cuadrilla',
     corto: 'JC',
     unico: false,
     descripcion: 'Ve antecedentes de su cuadrilla en operativos',
@@ -69,6 +88,8 @@ const CATALOGO_CARGOS = [
   {
     key: 'lem',
     label: 'Líder Equipo Médico',
+    labelMasculino: 'Líder Equipo Médico',
+    labelFemenino: 'Líder Equipo Médico',
     corto: 'LEM',
     unico: false,
     descripcion: 'Coordina área médica y asigna Prehospitalario',
@@ -76,18 +97,47 @@ const CATALOGO_CARGOS = [
   {
     key: 'prehospitalario',
     label: 'Prehospitalario',
+    labelMasculino: 'Prehospitalario',
+    labelFemenino: 'Prehospitalaria',
     corto: 'PREHOSP',
     unico: false,
     descripcion: 'Designado por SA, DG, DO o LEM · Ingresa casos de Triage',
   },
   {
     key: 'instructor',
-    label: 'Instructor',
+    label: 'Instructor/a',
+    labelMasculino: 'Instructor',
+    labelFemenino: 'Instructora',
     corto: 'INST',
     unico: false,
     descripcion: 'Coordina formación, academias y simulacros operativos',
   },
+  {
+    key: 'logistica',
+    label: 'Logística',
+    labelMasculino: 'Logística',
+    labelFemenino: 'Logística',
+    corto: 'LOG',
+    unico: false,
+    descripcion: 'Gestión de equipamiento, bodega, vehículos y suministros',
+  },
+  {
+    key: 'apoyo_tesoreria',
+    label: 'Apoyo a Tesorería',
+    labelMasculino: 'Apoyo a Tesorería',
+    labelFemenino: 'Apoyo a Tesorería',
+    corto: 'AP. TES',
+    unico: false,
+    descripcion: 'Colaboración en rendiciones, cuotas y respaldos contables',
+  },
 ];
+
+const obtenerEtiquetaCargoGenero = (cargoObj, genero) => {
+  if (!cargoObj) return '';
+  return genero === 'femenino'
+    ? cargoObj.labelFemenino || cargoObj.label
+    : cargoObj.labelMasculino || cargoObj.label;
+};
 
 const CAMPOS_VISIBILIDAD = [
   { key: 'foto_url', label: 'Fotografía' },
@@ -372,9 +422,14 @@ export default function GestionDirectorio() {
       ? perfil.cargos_operativos.map((c) => c.toLowerCase())
       : [];
     const esMujer = perfil?.genero === 'femenino';
+    const cargosDirectorio = ['director', 'secretario', 'tesorero', 'do'];
 
-    if (cargos.includes('do')) return 'DIRECTOR OPERATIVO';
-    if (r === 'director') return 'DIRECTORIO';
+    if (
+      r === 'director' ||
+      cargos.some((c) => cargosDirectorio.includes(c))
+    ) {
+      return 'DIRECTORIO';
+    }
     if (r === 'superadmin' || r === 'voluntario') {
       return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
     }
@@ -386,17 +441,21 @@ export default function GestionDirectorio() {
     const cargos = Array.isArray(perfil?.cargos_operativos)
       ? perfil.cargos_operativos.map((c) => c.toLowerCase())
       : [];
+    const esMujer = perfil?.genero === 'femenino';
 
     const etiquetasCargo = {
-      tesorero: 'TESORERO',
-      secretario: 'SECRETARÍA',
-      do: 'DIRECCIÓN OPERATIVA',
-      dos: 'DIRECCIÓN OPERATIVA',
-      jc: 'JEFE DE CUADRILLA',
+      director: esMujer ? 'DIRECTORA' : 'DIRECTOR',
+      tesorero: esMujer ? 'TESORERA' : 'TESORERO',
+      secretario: esMujer ? 'SECRETARIA' : 'SECRETARIO',
+      do: esMujer ? 'DIRECTORA OPERATIVA' : 'DIRECTOR OPERATIVO',
+      dos: esMujer ? 'DIRECTORA OP. SUPLENTE' : 'DIRECTOR OP. SUPLENTE',
+      jc: esMujer ? 'JEFA DE CUADRILLA' : 'JEFE DE CUADRILLA',
       lem: 'PREHOSPITALARIO',
-      prehospitalario: 'PREHOSPITALARIO',
-      instructor: 'INSTRUCCIÓN',
-      operativo: 'OPERATIVO',
+      prehospitalario: esMujer ? 'PREHOSPITALARIA' : 'PREHOSPITALARIO',
+      instructor: esMujer ? 'INSTRUCTORA' : 'INSTRUCTOR',
+      logistica: 'LOGÍSTICA',
+      apoyo_tesoreria: 'APOYO A TESORERÍA',
+      operativo: esMujer ? 'OPERATIVA' : 'OPERATIVO',
     };
 
     const cargosMapeados = cargos
@@ -414,7 +473,7 @@ export default function GestionDirectorio() {
   const formatearEspecialidadesParaCredencial = (lista = []) => {
     const limpias = Array.isArray(lista) ? lista.filter(Boolean) : [];
     if (limpias.length === 0) {
-      return 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
+      return 'PERSONAL OPERATIVO';
     }
     if (limpias.length > 6) {
       return limpias
@@ -883,9 +942,29 @@ export default function GestionDirectorio() {
       ? [...miembroObjetivo.cargos_operativos]
       : [];
     const yaTiene = actuales.includes(claveCargo);
+    const cargoMeta = CATALOGO_CARGOS.find((c) => c.key === claveCargo);
     const nuevos = yaTiene
       ? actuales.filter((c) => c !== claveCargo)
       : [...actuales, claveCargo];
+
+    if (!yaTiene && cargoMeta?.unico) {
+      const otrosConCargo = perfiles.filter(
+        (p) =>
+          p.id !== miembroObjetivo.id &&
+          Array.isArray(p.cargos_operativos) &&
+          p.cargos_operativos.includes(claveCargo)
+      );
+
+      for (const otro of otrosConCargo) {
+        const filtrados = otro.cargos_operativos.filter(
+          (c) => c !== claveCargo
+        );
+        await supabase
+          .from('perfiles')
+          .update({ cargos_operativos: filtrados })
+          .eq('id', otro.id);
+      }
+    }
 
     const { error } = await supabase
       .from('perfiles')
@@ -1117,7 +1196,9 @@ export default function GestionDirectorio() {
                         className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-[#D90429]"
                       >
                         <Award size={12} strokeWidth={2.5} />
-                        {info ? info.label : cargoKey}
+                        {info
+                          ? obtenerEtiquetaCargoGenero(info, m.genero)
+                          : cargoKey}
                       </span>
                     );
                   })}

@@ -27,17 +27,21 @@ function resolverFuncionAreaPublica(voluntario) {
   const cargos = Array.isArray(voluntario?.cargos_operativos)
     ? voluntario.cargos_operativos.map((c) => String(c).toLowerCase())
     : [];
+  const esMujer = voluntario?.genero === 'femenino';
 
   const etiquetasCargo = {
-    tesorero: 'Tesorero',
-    secretario: 'Secretaría',
-    do: 'Dirección Operativa',
-    dos: 'Dirección Operativa',
-    jc: 'Jefe de Cuadrilla',
-    lem: 'Prehospitalario',
-    prehospitalario: 'Prehospitalario',
-    instructor: 'Instrucción',
-    operativo: 'Operativo',
+    director: esMujer ? 'Directora' : 'Director',
+    tesorero: esMujer ? 'Tesorera' : 'Tesorero',
+    secretario: esMujer ? 'Secretaria' : 'Secretario',
+    do: esMujer ? 'Directora Operativa' : 'Director Operativo',
+    dos: esMujer ? 'Directora Op. Suplente' : 'Director Op. Suplente',
+    jc: esMujer ? 'Jefa de Cuadrilla' : 'Jefe de Cuadrilla',
+    lem: 'Líder Equipo Médico',
+    prehospitalario: esMujer ? 'Prehospitalaria' : 'Prehospitalario',
+    instructor: esMujer ? 'Instructora' : 'Instructor',
+    logistica: 'Logística',
+    apoyo_tesoreria: 'Apoyo a Tesorería',
+    operativo: esMujer ? 'Operativa' : 'Operativo',
   };
 
   const cargosMapeados = cargos.map((c) => etiquetasCargo[c]).filter(Boolean);

@@ -99,7 +99,7 @@ function formatearEspecialidadesParaCredencial(listaEspecialidades = []) {
         ? listaEspecialidades.filter(Boolean)
         : [];
     if (lista.length === 0) {
-        return 'PENDIENTE DE VALIDACIÓN · BÚSQUEDA Y RESCATE';
+        return 'PERSONAL OPERATIVO';
     }
     if (lista.length > 6) {
         return lista
@@ -165,34 +165,40 @@ function resolverTituloFranjaCredencial(perfil, generoActual) {
         ? perfil.cargos_operativos.map((c) => c.toLowerCase())
         : [];
     const esMujer = (perfil?.genero || generoActual) === 'femenino';
+    const cargosDirectorio = ['director', 'secretario', 'tesorero', 'do'];
 
-    if (cargos.includes('do')) return 'DIRECTOR OPERATIVO';
-    if (r === 'director') return 'DIRECTORIO';
-    if (r === 'superadmin') {
-        return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
+    if (
+        r === 'director' ||
+        cargos.some((c) => cargosDirectorio.includes(c))
+    ) {
+        return 'DIRECTORIO';
     }
-    if (r === 'voluntario') {
+    if (r === 'superadmin' || r === 'voluntario') {
         return esMujer ? 'VOLUNTARIA' : 'VOLUNTARIO';
     }
     return r.toUpperCase();
 }
 
-function resolverFuncionAreaCredencial(perfil) {
+function resolverFuncionAreaCredencial(perfil, generoActual) {
     const r = (perfil?.rol || 'voluntario').toLowerCase();
     const cargos = Array.isArray(perfil?.cargos_operativos)
         ? perfil.cargos_operativos.map((c) => c.toLowerCase())
         : [];
+    const esMujer = (perfil?.genero || generoActual) === 'femenino';
 
     const etiquetasCargo = {
-        tesorero: 'TESORERO',
-        secretario: 'SECRETARÍA',
-        do: 'DIRECCIÓN OPERATIVA',
-        dos: 'DIRECCIÓN OPERATIVA',
-        jc: 'JEFE DE CUADRILLA',
+        director: esMujer ? 'DIRECTORA' : 'DIRECTOR',
+        tesorero: esMujer ? 'TESORERA' : 'TESORERO',
+        secretario: esMujer ? 'SECRETARIA' : 'SECRETARIO',
+        do: esMujer ? 'DIRECTORA OPERATIVA' : 'DIRECTOR OPERATIVO',
+        dos: esMujer ? 'DIRECTORA OP. SUPLENTE' : 'DIRECTOR OP. SUPLENTE',
+        jc: esMujer ? 'JEFA DE CUADRILLA' : 'JEFE DE CUADRILLA',
         lem: 'PREHOSPITALARIO',
-        prehospitalario: 'PREHOSPITALARIO',
-        instructor: 'INSTRUCCIÓN',
-        operativo: 'OPERATIVO',
+        prehospitalario: esMujer ? 'PREHOSPITALARIA' : 'PREHOSPITALARIO',
+        instructor: esMujer ? 'INSTRUCTORA' : 'INSTRUCTOR',
+        logistica: 'LOGÍSTICA',
+        apoyo_tesoreria: 'APOYO A TESORERÍA',
+        operativo: esMujer ? 'OPERATIVA' : 'OPERATIVO',
     };
 
     const cargosMapeados = cargos
@@ -857,7 +863,10 @@ export default function MiPerfil() {
                 HF * 0.655
             );
 
-            const funcionAreaTexto = resolverFuncionAreaCredencial(profile);
+            const funcionAreaTexto = resolverFuncionAreaCredencial(
+                profile,
+                form.genero
+            );
             ctxF.font = '900 22px sans-serif';
             ctxF.fillText(funcionAreaTexto, 420, HF * 0.787, 545);
 
