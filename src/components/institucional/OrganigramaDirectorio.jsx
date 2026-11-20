@@ -1,141 +1,88 @@
-import { Shield } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Shield, User } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
-// Edita aquí los nombres reales cuando lo desees
-const DIRECTIVA_ACTUAL = {
-  director: {
-    cargoInterno: 'Director',
-    cargoLegal: 'Presidente Legal · Representante Judicial y Extrajudicial',
-    nombre: 'Nombre del Director',
-    especialidad: 'Mando Institucional y Protección Civil',
-    foto: '/directorio/director.jpg',
-    iniciales: 'DIR',
-  },
-  tesorero: {
-    cargoInterno: 'Tesorero',
-    cargoLegal: 'Administración Financiera y Patrimonio',
-    nombre: 'Nombre del Tesorero',
-    especialidad: 'Gestión Contable e Inventario',
-    foto: '/directorio/tesorero.jpg',
-    iniciales: 'TES',
-  },
-  secretario: {
-    cargoInterno: 'Secretario',
-    cargoLegal: 'Ministro de Fe y Registro Oficial',
-    nombre: 'Nombre del Secretario',
-    especialidad: 'Actas, Gobernanza y Acreditación',
-    foto: '/directorio/secretario.jpg',
-    iniciales: 'SEC',
-  },
-  directorOperativo: {
-    cargoInterno: 'Director Operativo',
-    cargoLegal: 'Designado por el Director · Jefatura de Terreno',
-    nombre: 'Nombre del Director Operativo',
-    especialidad: 'Despliegue SAR, Rescate y Emergencias',
-    foto: '/directorio/director-operativo.jpg',
-    iniciales: 'OPE',
-  },
-};
-
-function TarjetaMando({ persona, variante = 'estandar', badge }) {
-  const esPrincipal = variante === 'director';
+function TarjetaOrganigrama({ persona, cargoTitulo, badge, variante = 'directorio' }) {
+  const esPresidente = variante === 'presidente';
   const esOperativo = variante === 'operativo';
+  const iniciales = (persona.nombre_completo || 'B')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0].toUpperCase())
+    .join('');
 
   return (
-    <div className="escena-3d w-full">
+    <div className="escena-3d w-full max-w-[280px]">
       <div
-        className={`tarjeta-3d overflow-hidden rounded-xl border-2 transition-colors ${
-          esPrincipal
-            ? 'sombra-volumetrica-oscura border-red-600 bg-neutral-950 text-white'
+        className={`tarjeta-3d overflow-hidden rounded-2xl border-2 transition-colors ${
+          esPresidente
+            ? 'sombra-volumetrica-oscura border-[#C8202F] bg-[#17191D] text-white'
             : esOperativo
-              ? 'sombra-volumetrica-oscura border-amber-400 bg-neutral-900 text-white'
-              : 'sombra-volumetrica-clara border-neutral-900 bg-white text-neutral-950'
+              ? 'sombra-volumetrica-oscura border-[#F2B632] bg-neutral-900 text-white'
+              : 'sombra-volumetrica-clara border-[#17191D] bg-white text-[#17191D]'
         }`}
       >
-        {/* Franja Superior */}
         <div
-          className={`flex items-center justify-between px-4 py-2 text-[11px] font-black uppercase tracking-widest ${
-            esPrincipal
-              ? 'bg-red-600 text-white'
+          className={`flex items-center justify-between px-4 py-2 text-[10px] font-black uppercase tracking-widest ${
+            esPresidente
+              ? 'bg-[#C8202F] text-white'
               : esOperativo
-                ? 'bg-amber-400 text-black'
-                : 'bg-neutral-950 text-amber-400'
+                ? 'bg-[#F2B632] text-[#17191D]'
+                : 'bg-[#17191D] text-[#F2B632]'
           }`}
         >
           <span>{badge}</span>
-          <Shield size={14} />
+          <Shield size={13} />
         </div>
 
-        {/* Contenedor Fotográfico con Relieve */}
-        <div className="flex flex-col items-center p-6 text-center">
+        <div className="flex flex-col items-center p-5 text-center">
           <div
-            className={`capa-z-10 mb-4 h-28 w-28 overflow-hidden rounded-full border-4 shadow-xl sm:h-32 sm:w-32 ${
-              esPrincipal
-                ? 'border-amber-400 bg-neutral-800'
+            className={`capa-z-10 mb-3.5 h-24 w-24 overflow-hidden rounded-full border-4 shadow-lg ${
+              esPresidente
+                ? 'border-[#F2B632] bg-neutral-800'
                 : esOperativo
-                  ? 'border-red-600 bg-neutral-800'
-                  : 'border-neutral-950 bg-neutral-100'
+                  ? 'border-[#C8202F] bg-neutral-800'
+                  : 'border-[#17191D] bg-neutral-100'
             }`}
           >
-            <img
-              src={persona.foto}
-              alt={`${persona.cargoInterno} - O.N.G. BRE BIO BIO`}
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'flex';
-              }}
-            />
-            <div className="hidden h-full w-full items-center justify-center text-2xl font-black tracking-wider text-neutral-400">
-              {persona.iniciales}
-            </div>
+            {persona.foto_url ? (
+              <img
+                src={persona.foto_url}
+                alt={persona.nombre_completo || cargoTitulo}
+                className="h-full w-full object-cover object-top"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xl font-black text-neutral-400">
+                {iniciales || <User size={32} />}
+              </div>
+            )}
           </div>
 
-          <h3
-            className={`capa-z-20 text-xl font-black uppercase tracking-tight ${
-              esPrincipal || esOperativo ? 'text-white' : 'text-black'
-            }`}
-          >
-            {persona.cargoInterno}
-          </h3>
-
           <p
-            className={`mt-1 text-xs font-extrabold uppercase tracking-wider ${
-              esPrincipal
-                ? 'text-amber-400'
-                : esOperativo
-                  ? 'text-red-400'
-                  : 'text-red-600'
+            className={`capa-z-20 text-base font-black uppercase tracking-tight ${
+              esPresidente || esOperativo ? 'text-white' : 'text-[#17191D]'
             }`}
           >
-            {persona.cargoLegal}
+            {cargoTitulo}
           </p>
 
           <div
-            className={`my-3.5 h-1 w-12 rounded-full ${
-              esPrincipal
-                ? 'bg-red-600'
+            className={`my-2.5 h-1 w-10 rounded-full ${
+              esPresidente
+                ? 'bg-[#C8202F]'
                 : esOperativo
-                  ? 'bg-amber-400'
-                  : 'bg-neutral-900'
+                  ? 'bg-[#F2B632]'
+                  : 'bg-[#C8202F]'
             }`}
           />
 
           <p
-            className={`text-base font-black ${
-              esPrincipal || esOperativo ? 'text-white' : 'text-neutral-900'
+            className={`text-sm font-extrabold ${
+              esPresidente || esOperativo ? 'text-neutral-100' : 'text-neutral-900'
             }`}
           >
-            {persona.nombre}
-          </p>
-
-          <p
-            className={`mt-1 text-xs font-semibold ${
-              esPrincipal || esOperativo
-                ? 'text-neutral-300'
-                : 'text-neutral-600'
-            }`}
-          >
-            {persona.especialidad}
+            {persona.nombre_completo}
           </p>
         </div>
       </div>
@@ -144,85 +91,166 @@ function TarjetaMando({ persona, variante = 'estandar', badge }) {
 }
 
 export default function OrganigramaDirectorio() {
+  const [perfiles, setPerfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const cargar = async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('perfiles')
+        .select('id, nombre_completo, rol, cargos_operativos, foto_url, genero')
+        .eq('estado_validacion', 'aprobado')
+        .eq('activo', true);
+
+      if (Array.isArray(data)) {
+        setPerfiles(data);
+      }
+      setLoading(false);
+    };
+
+    cargar();
+  }, []);
+
+  const buscarPorCargo = (claveCargo) =>
+    perfiles.find((p) => {
+      const cs = Array.isArray(p.cargos_operativos)
+        ? p.cargos_operativos.map((c) => String(c).toLowerCase())
+        : [];
+      return cs.includes(claveCargo);
+    }) || null;
+
+  const presidente = buscarPorCargo('presidente');
+  const vicepresidente = buscarPorCargo('vicepresidente');
+  const secretario = buscarPorCargo('secretario');
+  const tesorero = buscarPorCargo('tesorero');
+  const director =
+    buscarPorCargo('director') ||
+    perfiles.find((p) => (p.rol || '').toLowerCase() === 'director') ||
+    null;
+  const directorOperativo = buscarPorCargo('do');
+
+  const esMujer = (p) => p?.genero === 'femenino';
+
+  const miembrosDirectorioSecundario = [
+    vicepresidente && {
+      key: 'vicepresidente',
+      persona: vicepresidente,
+      titulo: esMujer(vicepresidente) ? 'Vicepresidenta' : 'Vicepresidente',
+      badge: 'Directorio',
+    },
+    secretario && {
+      key: 'secretario',
+      persona: secretario,
+      titulo: esMujer(secretario) ? 'Secretaria' : 'Secretario',
+      badge: 'Directorio · Ministro de Fe',
+    },
+    tesorero && {
+      key: 'tesorero',
+      persona: tesorero,
+      titulo: esMujer(tesorero) ? 'Tesorera' : 'Tesorero',
+      badge: 'Directorio · Finanzas',
+    },
+    director && {
+      key: 'director',
+      persona: director,
+      titulo: esMujer(director) ? 'Directora' : 'Director',
+      badge: 'Directorio',
+    },
+  ].filter(Boolean);
+
+  const hayAlgunCargo = Boolean(
+    presidente || miembrosDirectorioSecundario.length > 0 || directorOperativo
+  );
+
+  if (!loading && !hayAlgunCargo) {
+    return null;
+  }
+
   return (
-    <section className="border-y-2 border-neutral-300 bg-neutral-100 py-24">
+    <section className="relative z-10 border-y-2 border-neutral-200 bg-[#F3F4F6] py-20 text-[#17191D]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Encabezado de Sección */}
-        <div className="mb-16 max-w-3xl">
-          <span className="mb-3 inline-block rounded bg-black px-3.5 py-1.5 text-xs font-black uppercase tracking-[0.2em] text-amber-400">
-            Gobernanza y Mando Institucional
+        <div className="mb-14 border-l-4 border-[#C8202F] pl-5">
+          <span className="text-xs font-black uppercase tracking-[0.2em] text-[#C8202F]">
+            Conducción Institucional
           </span>
-          <h2 className="text-3xl font-black uppercase tracking-tight text-black sm:text-5xl">
-            Directorio Actual
+          <h2 className="mt-1 text-3xl font-black uppercase tracking-tight text-[#17191D] sm:text-4xl">
+            Organigrama y Directorio
           </h2>
-          <p className="mt-3 text-base font-semibold leading-relaxed text-neutral-700 sm:text-lg">
-            Estructura directiva constituida conforme a nuestros estatutos
-            vigentes, articulando la representación legal con la conducción
-            operativa en terreno.
+        </div>
+
+        {loading ? (
+          <p className="py-8 text-center text-xs font-extrabold uppercase tracking-wider text-neutral-500">
+            Cargando estructura institucional...
           </p>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center">
+            {/* Nivel 1: Presidente */}
+            {presidente && (
+              <div className="flex flex-col items-center">
+                <TarjetaOrganigrama
+                  persona={presidente}
+                  cargoTitulo={esMujer(presidente) ? 'Presidenta' : 'Presidente'}
+                  badge="Directorio · Presidencia"
+                  variante="presidente"
+                />
 
-        {/* =================================================================
-            ARQUITECTURA DEL ORGANIGRAMA
-        ================================================================= */}
-        <div className="relative">
-          {/* NIVEL 1: DIRECTORIO ESTATUTARIO (DIRECTOR, TESORERO, SECRETARIO) */}
-          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
-            {/* Columna 1: Tesorero */}
-            <div className="order-2 lg:order-1 lg:mt-10">
-              <TarjetaMando
-                persona={DIRECTIVA_ACTUAL.tesorero}
-                badge="Directorio · Finanzas"
-              />
-            </div>
-
-            {/* Columna 2 (Centro): DIRECTOR (Presidente Legal) */}
-            <div className="relative order-1 lg:order-2">
-              <TarjetaMando
-                persona={DIRECTIVA_ACTUAL.director}
-                variante="director"
-                badge="Máxima Autoridad · Directorio"
-              />
-
-              {/* Línea Conectora Vertical hacia Director Operativo (Desktop) */}
-              <div className="hidden flex-col items-center lg:flex">
-                <div className="h-12 w-1 bg-red-600" />
-                <div className="rounded border-2 border-red-600 bg-black px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-400 shadow-md">
-                  Designación Directa
-                </div>
-                <div className="h-10 w-1 bg-red-600" />
+                {(miembrosDirectorioSecundario.length > 0 || directorOperativo) && (
+                  <div className="h-10 w-0.5 bg-[#C8202F]" />
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Columna 3: Secretario */}
-            <div className="order-3 lg:mt-10">
-              <TarjetaMando
-                persona={DIRECTIVA_ACTUAL.secretario}
-                badge="Directorio · Ministro de Fe"
-              />
-            </div>
-          </div>
+            {/* Nivel 2: Directorio (hasta Vicepresidente) + Mando Operativo (DO) */}
+            {(miembrosDirectorioSecundario.length > 0 || directorOperativo) && (
+              <div className="w-full space-y-12">
+                {miembrosDirectorioSecundario.length > 0 && (
+                  <div className="relative flex flex-col items-center">
+                    {miembrosDirectorioSecundario.length > 1 && (
+                      <div className="hidden h-0.5 w-3/4 max-w-3xl bg-[#C8202F] lg:block" />
+                    )}
+                    <div className="mt-0 flex w-full flex-wrap justify-center gap-6 lg:mt-6">
+                      {miembrosDirectorioSecundario.map((item) => (
+                        <div key={item.key} className="flex flex-col items-center">
+                          <div className="hidden h-5 w-0.5 bg-[#C8202F] lg:-mt-6 lg:mb-1 lg:block" />
+                          <TarjetaOrganigrama
+                            persona={item.persona}
+                            cargoTitulo={item.titulo}
+                            badge={item.badge}
+                            variante="directorio"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {/* Conector móvil hacia Director Operativo */}
-          <div className="my-4 flex flex-col items-center lg:hidden">
-            <div className="h-8 w-1 bg-red-600" />
-            <span className="rounded bg-black px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-400">
-              Designado por el Director
-            </span>
-            <div className="h-8 w-1 bg-red-600" />
+                {directorOperativo && (
+                  <div className="flex flex-col items-center border-t border-dashed border-neutral-300 pt-10">
+                    <span className="mb-4 rounded bg-[#17191D] px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#F2B632]">
+                      Rama Operativa · Designación Directa
+                    </span>
+                    <TarjetaOrganigrama
+                      persona={directorOperativo}
+                      cargoTitulo={
+                        esMujer(directorOperativo)
+                          ? 'Directora Operativa'
+                          : 'Director Operativo'
+                      }
+                      badge={
+                        esMujer(directorOperativo)
+                          ? 'Voluntaria · Mando Operativo'
+                          : 'Voluntario · Mando Operativo'
+                      }
+                      variante="operativo"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-
-          {/* NIVEL 2: DIRECTOR OPERATIVO (SALE DESDE EL DIRECTOR) */}
-          <div className="mx-auto max-w-md">
-            <TarjetaMando
-              persona={DIRECTIVA_ACTUAL.directorOperativo}
-              variante="operativo"
-              badge="Mando Táctico y Terreno"
-            />
-          </div>
-        </div>
+        )}
       </div>
     </section>
   );
 }
-

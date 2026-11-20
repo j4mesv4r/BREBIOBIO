@@ -30,6 +30,8 @@ function resolverFuncionAreaPublica(voluntario) {
   const esMujer = voluntario?.genero === 'femenino';
 
   const etiquetasCargo = {
+    presidente: esMujer ? 'Presidenta' : 'Presidente',
+    vicepresidente: esMujer ? 'Vicepresidenta' : 'Vicepresidente',
     director: esMujer ? 'Directora' : 'Director',
     tesorero: esMujer ? 'Tesorera' : 'Tesorero',
     secretario: esMujer ? 'Secretaria' : 'Secretario',

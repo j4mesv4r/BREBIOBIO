@@ -35,6 +35,24 @@ import { useAuth } from '../../context/AuthContext';
 
 const CATALOGO_CARGOS = [
   {
+    key: 'presidente',
+    label: 'Presidente/a',
+    labelMasculino: 'Presidente',
+    labelFemenino: 'Presidenta',
+    corto: 'PRES',
+    unico: true,
+    descripcion: 'Único (1 en ONG) · Presidencia institucional y representación legal',
+  },
+  {
+    key: 'vicepresidente',
+    label: 'Vicepresidente/a',
+    labelMasculino: 'Vicepresidente',
+    labelFemenino: 'Vicepresidenta',
+    corto: 'VP',
+    unico: true,
+    descripcion: 'Único (1 en ONG) · Subrogancia presidencial e integrante del Directorio',
+  },
+  {
     key: 'director',
     label: 'Director/a',
     labelMasculino: 'Director',
@@ -642,8 +660,11 @@ export default function GestionDirectorio() {
       ? perfil.cargos_operativos.map((c) => c.toLowerCase())
       : [];
     const esMujer = perfil?.genero === 'femenino';
-    const cargosDirectorio = ['director', 'secretario', 'tesorero', 'do'];
+    const cargosDirectorio = ['vicepresidente', 'director', 'secretario', 'tesorero', 'do'];
 
+    if (r === 'presidente' || cargos.includes('presidente')) {
+      return esMujer ? 'PRESIDENTA' : 'PRESIDENTE';
+    }
     if (
       r === 'director' ||
       cargos.some((c) => cargosDirectorio.includes(c))
@@ -664,6 +685,8 @@ export default function GestionDirectorio() {
     const esMujer = perfil?.genero === 'femenino';
 
     const etiquetasCargo = {
+      presidente: esMujer ? 'PRESIDENTA' : 'PRESIDENTE',
+      vicepresidente: esMujer ? 'VICEPRESIDENTA' : 'VICEPRESIDENTE',
       director: esMujer ? 'DIRECTORA' : 'DIRECTOR',
       tesorero: esMujer ? 'TESORERA' : 'TESORERO',
       secretario: esMujer ? 'SECRETARIA' : 'SECRETARIO',

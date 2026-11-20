@@ -165,8 +165,11 @@ function resolverTituloFranjaCredencial(perfil, generoActual) {
         ? perfil.cargos_operativos.map((c) => c.toLowerCase())
         : [];
     const esMujer = (perfil?.genero || generoActual) === 'femenino';
-    const cargosDirectorio = ['director', 'secretario', 'tesorero', 'do'];
+    const cargosDirectorio = ['vicepresidente', 'director', 'secretario', 'tesorero', 'do'];
 
+    if (r === 'presidente' || cargos.includes('presidente')) {
+        return esMujer ? 'PRESIDENTA' : 'PRESIDENTE';
+    }
     if (
         r === 'director' ||
         cargos.some((c) => cargosDirectorio.includes(c))
@@ -187,6 +190,8 @@ function resolverFuncionAreaCredencial(perfil, generoActual) {
     const esMujer = (perfil?.genero || generoActual) === 'femenino';
 
     const etiquetasCargo = {
+        presidente: esMujer ? 'PRESIDENTA' : 'PRESIDENTE',
+        vicepresidente: esMujer ? 'VICEPRESIDENTA' : 'VICEPRESIDENTE',
         director: esMujer ? 'DIRECTORA' : 'DIRECTOR',
         tesorero: esMujer ? 'TESORERA' : 'TESORERO',
         secretario: esMujer ? 'SECRETARIA' : 'SECRETARIO',
