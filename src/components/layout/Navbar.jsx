@@ -92,11 +92,21 @@ export default function Navbar() {
 
           {/* Controles Móvil */}
           <div className="flex items-center gap-2 lg:hidden">
-            {!user && (
+            {user ? (
+              <Link
+                to="/mi-perfil"
+                aria-label="Mi Perfil"
+                title="Mi Panel Operativo"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-[#23272F] to-[#0A0A0A] text-[#F2B632] shadow-md ring-1 ring-white/25"
+              >
+                <UserCheck size={18} strokeWidth={2.5} />
+              </Link>
+            ) : (
               <Link
                 to="/login"
-                aria-label="Ingresar"
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-[#23272F] to-[#0A0A0A] text-[#F2B632] shadow-md"
+                aria-label="Ingresar a Intranet"
+                title="Acceso Intranet"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-[#23272F] to-[#0A0A0A] text-[#F2B632] shadow-md ring-1 ring-white/25"
               >
                 <Lock size={18} strokeWidth={2.5} />
               </Link>
