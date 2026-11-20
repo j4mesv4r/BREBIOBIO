@@ -8,9 +8,9 @@ import {
   Send,
   FileText,
   CheckCircle2,
-  User,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import OrganigramaDirectorio from '../../components/institucional/OrganigramaDirectorio';
 
 const MEMORIAS_ANUALES = [
   {
@@ -75,7 +75,6 @@ const FondoTopograficoInstitucion = () => (
 );
 
 export default function SobreNosotros() {
-  const [directorio, setDirectorio] = useState([]);
   const [cfgWeb, setCfgWeb] = useState({});
   const [contacto, setContacto] = useState({
     nombre: '',
@@ -100,55 +99,6 @@ export default function SobreNosotros() {
 
     cargarConfiguracionWeb();
   }, []);
-
-  useEffect(() => {
-    const cargarDirectorio = async () => {
-      const { data } = await supabase
-        .from('perfiles')
-        .select('id, nombre_completo, rol, cargos_operativos, foto_url')
-        .eq('estado_validacion', 'aprobado');
-
-      if (Array.isArray(data)) {
-        const directivos = data.filter((p) => {
-          const r = (p.rol || '').toLowerCase();
-          const cs = Array.isArray(p.cargos_operativos)
-            ? p.cargos_operativos
-            : [];
-          return (
-            ['superadmin', 'director'].includes(r) ||
-            cs.some((c) =>
-              ['secretario', 'tesorero', 'do', 'dos', 'lem', 'instructor'].includes(
-                c.toLowerCase()
-              )
-            )
-          );
-        });
-        setDirectorio(directivos);
-      }
-    };
-
-    cargarDirectorio();
-  }, []);
-
-  const obtenerCargoLimpio = (persona) => {
-    const r = (persona.rol || '').toLowerCase();
-    const cs = Array.isArray(persona.cargos_operativos)
-      ? persona.cargos_operativos
-      : [];
-    const etiquetas = {
-      secretario: 'Secretario',
-      tesorero: 'Tesorero',
-      do: 'Director Operativo',
-      dos: 'Director Operativo Suplente',
-      lem: 'Líder Equipo Médico',
-      instructor: 'Instructor',
-      jc: 'Jefe de Cuadrilla',
-    };
-    const lista = cs.map((c) => etiquetas[c.toLowerCase()] || c.toUpperCase());
-    if (r === 'director') lista.unshift('Director');
-    if (lista.length === 0 && r === 'superadmin') return 'Administración';
-    return lista.join(' · ') || 'Directorio';
-  };
 
   const handleEnviarContacto = async (e) => {
     e.preventDefault();
@@ -215,54 +165,8 @@ export default function SobreNosotros() {
         </div>
       </section>
 
-      {/* 2. DIRECTORIO: FOTO DE CREDENCIAL + NOMBRE + CARGO */}
-      <section className="relative z-10 bg-white py-16 text-neutral-950">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-10 border-l-4 border-[#D90429] pl-4">
-            <span className="text-xs font-black uppercase tracking-widest text-[#D90429]">
-              Conducción Institucional
-            </span>
-            <h2 className="mt-1 text-3xl font-black uppercase text-neutral-950">
-              Directorio
-            </h2>
-          </div>
-
-          {directorio.length === 0 ? (
-            <p className="rounded-xl border border-neutral-200 bg-neutral-50 p-6 text-sm font-semibold text-neutral-600">
-              Nómina directiva en actualización.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {directorio.map((persona) => (
-                <div
-                  key={persona.id}
-                  className="overflow-hidden rounded-2xl border-2 border-neutral-950 bg-white shadow-[6px_6px_0px_0px_#0a0a0a]"
-                >
-                  <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-neutral-900">
-                    {persona.foto_url ? (
-                      <img
-                        src={persona.foto_url}
-                        alt={persona.nombre_completo}
-                        className="h-full w-full object-cover object-top"
-                      />
-                    ) : (
-                      <User size={52} className="text-neutral-500" />
-                    )}
-                  </div>
-                  <div className="p-4 text-center">
-                    <h3 className="text-base font-black text-neutral-950">
-                      {persona.nombre_completo}
-                    </h3>
-                    <p className="mt-1 text-xs font-black uppercase tracking-wider text-[#D90429]">
-                      {obtenerCargoLimpio(persona)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      {/* 2. ORGANIGRAMA Y DIRECTORIO INSTITUCIONAL */}
+      <OrganigramaDirectorio />
 
       {/* 3. MEMORIAS ANUALES PDF CON PORTADA */}
       <section className="relative z-10 border-t border-neutral-800 bg-neutral-950/95 py-16">

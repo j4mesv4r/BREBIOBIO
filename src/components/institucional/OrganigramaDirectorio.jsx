@@ -139,7 +139,10 @@ export default function OrganigramaDirectorio() {
   const tesorero = buscarPorCargo('tesorero');
   const director =
     buscarPorCargo('director') ||
-    perfiles.find((p) => (p.rol || '').toLowerCase() === 'director') ||
+    perfiles.find(
+      (p) =>
+        p.id !== presidente?.id && (p.rol || '').toLowerCase() === 'director'
+    ) ||
     null;
   const vicepresidente = buscarPorCargo('vicepresidente');
   const directorOperativo = buscarPorCargo('do');
@@ -227,15 +230,23 @@ export default function OrganigramaDirectorio() {
           <div className="relative flex flex-col items-center">
             <div className="flex w-full flex-col items-center justify-center gap-10 lg:flex-row lg:items-stretch lg:gap-0">
               {/* Árbol Jerárquico Principal */}
-              <div className="flex flex-1 flex-col items-center">
+              <div className="flex w-full max-w-[740px] flex-col items-center">
                 {/* Nivel 1: Presidente */}
                 {presidente && (
                   <div className="relative flex flex-col items-center">
-                    <TarjetaOrganigrama
-                      persona={presidente}
-                      cargoTitulo={esMujer(presidente) ? 'PRESIDENTA' : 'PRESIDENTE'}
-                      variante="presidente"
-                    />
+                    <div className="relative">
+                      <TarjetaOrganigrama
+                        persona={presidente}
+                        cargoTitulo={esMujer(presidente) ? 'PRESIDENTA' : 'PRESIDENTE'}
+                        variante="presidente"
+                      />
+                      {apoyoAdminEnlace && (
+                        <div
+                          aria-hidden="true"
+                          className="hidden h-[3px] w-[292px] bg-emerald-600 lg:absolute lg:left-full lg:top-1/2 lg:block lg:-translate-y-1/2"
+                        />
+                      )}
+                    </div>
                     {(nivelMesaDirectiva.length > 0 ||
                       nivelSubroganciaOperativa.length > 0) && (
                       <div className="h-8 w-[3px] bg-[#C8202F]" />
@@ -283,11 +294,19 @@ export default function OrganigramaDirectorio() {
                           className="relative flex flex-col items-center"
                         >
                           <div className="hidden h-6 w-[3px] bg-[#C8202F] lg:block" />
-                          <TarjetaOrganigrama
-                            persona={item.persona}
-                            cargoTitulo={item.titulo}
-                            variante={item.variante}
-                          />
+                          <div className="relative">
+                            <TarjetaOrganigrama
+                              persona={item.persona}
+                              cargoTitulo={item.titulo}
+                              variante={item.variante}
+                            />
+                            {item.key === 'do' && apoyoAdminEnlace && (
+                              <div
+                                aria-hidden="true"
+                                className="hidden h-[3px] w-[280px] bg-emerald-600 lg:absolute lg:left-full lg:top-1/2 lg:block lg:-translate-y-1/2"
+                              />
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -297,10 +316,8 @@ export default function OrganigramaDirectorio() {
 
               {/* Rama Lateral Derecha: Apoyo Admin. - Enlace (conector esmeralda hacia Presidente y Direc. Operativo) */}
               {apoyoAdminEnlace && (
-                <div className="relative flex flex-col items-center justify-between lg:w-[290px] lg:pl-8">
-                  {/* Conector horizontal superior verde desde Presidente */}
+                <div className="relative flex flex-col items-center justify-between lg:w-[252px] lg:pl-8">
                   <div className="relative flex w-full items-center justify-center lg:justify-end">
-                    <div className="hidden h-[3px] flex-1 bg-emerald-600 lg:block" />
                     <TarjetaOrganigrama
                       persona={apoyoAdminEnlace}
                       cargoTitulo="APOYO ADMIN. - ENLACE"
@@ -308,13 +325,12 @@ export default function OrganigramaDirectorio() {
                     />
                   </div>
 
-                  {/* Conector vertical e inferior verde hacia Direc. Operativo */}
+                  {/* Conector vertical verde hacia el nivel de Direc. Operativo */}
                   {directorOperativo && (
                     <div className="hidden w-full flex-1 flex-col items-end lg:flex">
                       <div className="mr-[110px] h-full w-[3px] bg-emerald-600" />
-                      <div className="mb-[104px] flex w-full items-center">
-                        <div className="h-[3px] flex-1 bg-emerald-600" />
-                        <div className="mr-[110px] h-3 w-3 -ml-1.5 rounded-full bg-emerald-600" />
+                      <div className="mb-[104px] flex w-full items-center justify-end">
+                        <div className="mr-[105.5px] h-3 w-3 rounded-full bg-emerald-600" />
                       </div>
                     </div>
                   )}
