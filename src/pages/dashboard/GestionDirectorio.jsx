@@ -25,6 +25,8 @@ import {
   Unlink,
   KeyRound,
   CreditCard,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -171,6 +173,22 @@ export default function GestionDirectorio() {
   const [claveInputs, setClaveInputs] = useState({});
   const [infoExito, setInfoExito] = useState('');
   const [descargandoCredKey, setDescargandoCredKey] = useState('');
+  const [editandoFichaId, setEditandoFichaId] = useState(null);
+  const [guardandoFicha, setGuardandoFicha] = useState(false);
+  const [fichaForm, setFichaForm] = useState({
+    nombre_completo: '',
+    rut: '',
+    genero: 'masculino',
+    telefono: '',
+    region: 'Región del Biobío',
+    comuna: '',
+    tipo_sangre: 'No especificado',
+    alergias: '',
+    contacto_emergencia_nombre: '',
+    contacto_emergencia_telefono: '',
+    especialidades: '',
+    fecha_vigencia_credencial: '',
+  });
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -274,6 +292,80 @@ export default function GestionDirectorio() {
         p.id === perfilId ? { ...p, fecha_vigencia_credencial: valor } : p
       )
     );
+  };
+
+  const abrirEdicionFicha = (miembro) => {
+    const listaEsp =
+      Array.isArray(miembro.especialidades_validadas) &&
+      miembro.especialidades_validadas.length > 0
+        ? miembro.especialidades_validadas
+        : Array.isArray(miembro.especialidades)
+          ? miembro.especialidades
+          : [];
+
+    setPanelAbiertoId(miembro.id);
+    setEditandoFichaId(miembro.id);
+    setFichaForm({
+      nombre_completo: miembro.nombre_completo || '',
+      rut: miembro.rut || '',
+      genero: miembro.genero === 'femenino' ? 'femenino' : 'masculino',
+      telefono: miembro.telefono || '',
+      region: miembro.region || 'Región del Biobío',
+      comuna: miembro.comuna || '',
+      tipo_sangre: miembro.tipo_sangre || 'No especificado',
+      alergias: miembro.alergias || '',
+      contacto_emergencia_nombre: miembro.contacto_emergencia_nombre || '',
+      contacto_emergencia_telefono: miembro.contacto_emergencia_telefono || '',
+      especialidades: listaEsp.join(', '),
+      fecha_vigencia_credencial: miembro.fecha_vigencia_credencial
+        ? String(miembro.fecha_vigencia_credencial).slice(0, 10)
+        : '',
+    });
+  };
+
+  const guardarEdicionFicha = async (e, miembroId) => {
+    e.preventDefault();
+    setGuardandoFicha(true);
+    setAlerta('');
+    setInfoExito('');
+
+    const especialidadesLista = fichaForm.especialidades
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const payload = {
+      nombre_completo: fichaForm.nombre_completo.trim(),
+      rut: fichaForm.rut.trim() || null,
+      genero: fichaForm.genero === 'femenino' ? 'femenino' : 'masculino',
+      telefono: fichaForm.telefono.trim() || null,
+      region: fichaForm.region.trim() || 'Región del Biobío',
+      comuna: fichaForm.comuna.trim() || null,
+      tipo_sangre: fichaForm.tipo_sangre.trim() || 'No especificado',
+      alergias: fichaForm.alergias.trim() || null,
+      contacto_emergencia_nombre:
+        fichaForm.contacto_emergencia_nombre.trim() || null,
+      contacto_emergencia_telefono:
+        fichaForm.contacto_emergencia_telefono.trim() || null,
+      especialidades: especialidadesLista,
+      especialidades_validadas: especialidadesLista,
+      fecha_vigencia_credencial: fichaForm.fecha_vigencia_credencial || null,
+    };
+
+    const { error } = await supabase
+      .from('perfiles')
+      .update(payload)
+      .eq('id', miembroId);
+
+    setGuardandoFicha(false);
+    if (error) {
+      setAlerta(error.message);
+      return;
+    }
+
+    setEditandoFichaId(null);
+    setInfoExito('Antecedentes de la ficha actualizados correctamente.');
+    await cargarDatos();
   };
 
   const handleCrearPerfil = async (e) => {
@@ -1341,7 +1433,18 @@ export default function GestionDirectorio() {
 
             <button
               type="button"
-              onClick={() => setPanelAbiertoId(expandido ? null : m.id)}
+              onClick={() => abrirEdicionFicha(m)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-white hover:bg-neutral-800"
+            >
+              <Edit3 size={14} /> Editar Ficha
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (expandido) setEditandoFichaId(null);
+                setPanelAbiertoId(expandido ? null : m.id);
+              }}
               className="rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black uppercase text-neutral-800 hover:bg-neutral-100"
             >
               {expandido
@@ -1355,6 +1458,236 @@ export default function GestionDirectorio() {
 
         {expandido && (
           <div className="grid grid-cols-1 gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
+            {editandoFichaId === m.id && (
+              <form
+                onSubmit={(e) => guardarEdicionFicha(e, m.id)}
+                className="space-y-4 rounded-xl border-2 border-[#0A0A0A] bg-white p-5 lg:col-span-2"
+              >
+                <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+                  <h4 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                    <Edit3 size={15} className="text-[#D90429]" />
+                    Edición Directa de Antecedentes de Ficha
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoFichaId(null)}
+                    className="text-xs font-black uppercase text-neutral-500 hover:text-neutral-900"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Nombre Completo
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={fichaForm.nombre_completo}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          nombre_completo: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      RUT
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.rut}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, rut: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Género
+                    </label>
+                    <select
+                      value={fichaForm.genero}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, genero: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold"
+                    >
+                      <option value="masculino">Masculino</option>
+                      <option value="femenino">Femenino</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Teléfono
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.telefono}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, telefono: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Región
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.region}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, region: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Comuna
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.comuna}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, comuna: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Tipo de Sangre
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.tipo_sangre}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          tipo_sangre: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Alergias
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.alergias}
+                      onChange={(e) =>
+                        setFichaForm({ ...fichaForm, alergias: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Vigencia Credencial
+                    </label>
+                    <input
+                      type="date"
+                      value={fichaForm.fecha_vigencia_credencial}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          fecha_vigencia_credencial: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Contacto Emergencia (Nombre)
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.contacto_emergencia_nombre}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          contacto_emergencia_nombre: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Contacto Emergencia (Teléfono)
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.contacto_emergencia_telefono}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          contacto_emergencia_telefono: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
+                      Especialidades (separadas por coma)
+                    </label>
+                    <input
+                      type="text"
+                      value={fichaForm.especialidades}
+                      onChange={(e) =>
+                        setFichaForm({
+                          ...fichaForm,
+                          especialidades: e.target.value,
+                        })
+                      }
+                      placeholder="Ej. Búsqueda y Rescate Agreste (GSAR), Soporte Vital Básico"
+                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditandoFichaId(null)}
+                    className="rounded-xl border border-neutral-300 bg-neutral-100 px-4 py-2 text-xs font-black uppercase text-neutral-700 hover:bg-neutral-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardandoFicha}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-5 py-2 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    <span>{guardandoFicha ? 'Guardando...' : 'Guardar Ficha'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
             {/* Antecedentes y Especialidades (Validadas vs Pendientes) */}
             <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:col-span-2">
               <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-neutral-900">
