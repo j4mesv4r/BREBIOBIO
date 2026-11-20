@@ -32,6 +32,7 @@ import {
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { REGIONES_CHILE } from '../../data/chileRegionesComunas';
 
 const CATALOGO_CARGOS = [
   {
@@ -235,6 +236,25 @@ function obtenerAbreviaturaEspecialidad(nombreEsp = '') {
     .join('');
 }
 
+function validarRutChileno(rutFormateado) {
+  const limpio = (rutFormateado || '').replace(/[^0-9kK]/g, '').toUpperCase();
+  if (limpio.length < 8) return false;
+  const cuerpo = limpio.slice(0, -1);
+  const dvIngresado = limpio.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i], 10) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+
+  const resto = 11 - (suma % 11);
+  const dvEsperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
+  return dvIngresado === dvEsperado;
+}
+
 const CAMPOS_VISIBILIDAD = [
   { key: 'foto_url', label: 'Fotografía' },
   { key: 'rut', label: 'RUT' },
@@ -403,11 +423,11 @@ export default function GestionDirectorio() {
     setEditandoFichaId(miembro.id);
     setFichaForm({
       nombre_completo: miembro.nombre_completo || '',
-      rut: miembro.rut || '',
+      rut: miembro.rut ? formatearRutCredencial(miembro.rut) : '',
       genero: miembro.genero === 'femenino' ? 'femenino' : 'masculino',
       telefono: miembro.telefono || '',
       region: miembro.region || 'Región del Biobío',
-      comuna: miembro.comuna || '',
+      comuna: miembro.comuna || 'Concepción',
       tipo_sangre: miembro.tipo_sangre || 'No especificado',
       alergias: miembro.alergias || '',
       contacto_emergencia_nombre: miembro.contacto_emergencia_nombre || '',
@@ -470,8 +490,18 @@ export default function GestionDirectorio() {
         s.abrev.toLowerCase().includes(inputEspFicha.toLowerCase()))
   );
 
+  const rutFichaValido =
+    !fichaForm.rut.trim() || validarRutChileno(fichaForm.rut);
+
+  const comunasFichaDisponibles =
+    REGIONES_CHILE.find((r) => r.region === fichaForm.region)?.comunas || [];
+
   const guardarEdicionFicha = async (e, miembroId) => {
     e.preventDefault();
+    if (fichaForm.rut.trim() && !validarRutChileno(fichaForm.rut)) {
+      setAlerta('El RUT ingresado no corresponde. Reintenta verificando el número.');
+      return;
+    }
     setGuardandoFicha(true);
     setAlerta('');
     setInfoExito('');
@@ -1655,10 +1685,23 @@ export default function GestionDirectorio() {
                       type="text"
                       value={fichaForm.rut}
                       onChange={(e) =>
-                        setFichaForm({ ...fichaForm, rut: e.target.value })
+                        setFichaForm({
+                          ...fichaForm,
+                          rut: formatearRutCredencial(e.target.value),
+                        })
                       }
-                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
+                      placeholder="19.082.512-4"
+                      className={`w-full rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                        !rutFichaValido
+                          ? 'border-[#D90429] bg-red-50 text-red-900'
+                          : 'border-neutral-300'
+                      }`}
                     />
+                    {!rutFichaValido && (
+                      <p className="mt-1 text-[10px] font-black text-[#D90429]">
+                        Este RUT no corresponde. Reintenta verificando el número.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -1695,36 +1738,59 @@ export default function GestionDirectorio() {
                     <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
                       Región
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={fichaForm.region}
-                      onChange={(e) =>
-                        setFichaForm({ ...fichaForm, region: e.target.value })
-                      }
-                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
-                    />
+                      onChange={(e) => {
+                        const nuevaReg = e.target.value;
+                        const primeraComuna =
+                          REGIONES_CHILE.find((r) => r.region === nuevaReg)
+                            ?.comunas?.[0] || '';
+                        setFichaForm({
+                          ...fichaForm,
+                          region: nuevaReg,
+                          comuna: primeraComuna,
+                        });
+                      }}
+                      className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold"
+                    >
+                      {REGIONES_CHILE.map((r) => (
+                        <option key={r.region} value={r.region}>
+                          {r.region}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
                       Comuna
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={fichaForm.comuna}
                       onChange={(e) =>
                         setFichaForm({ ...fichaForm, comuna: e.target.value })
                       }
-                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
-                    />
+                      className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold"
+                    >
+                      {fichaForm.comuna &&
+                        !comunasFichaDisponibles.includes(fichaForm.comuna) && (
+                          <option value={fichaForm.comuna}>
+                            {fichaForm.comuna}
+                          </option>
+                        )}
+                      {comunasFichaDisponibles.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-[10px] font-black uppercase text-neutral-600">
                       Tipo de Sangre
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={fichaForm.tipo_sangre}
                       onChange={(e) =>
                         setFichaForm({
@@ -1732,8 +1798,24 @@ export default function GestionDirectorio() {
                           tipo_sangre: e.target.value,
                         })
                       }
-                      className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold"
-                    />
+                      className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold"
+                    >
+                      {[
+                        'No especificado',
+                        'O+',
+                        'O-',
+                        'A+',
+                        'A-',
+                        'B+',
+                        'B-',
+                        'AB+',
+                        'AB-',
+                      ].map((gs) => (
+                        <option key={gs} value={gs}>
+                          {gs}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1875,7 +1957,7 @@ export default function GestionDirectorio() {
                   </button>
                   <button
                     type="submit"
-                    disabled={guardandoFicha}
+                    disabled={guardandoFicha || !rutFichaValido}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-5 py-2 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     <Save size={14} />
