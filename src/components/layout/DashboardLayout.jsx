@@ -102,8 +102,9 @@ export default function DashboardLayout({
             icon: Package,
             visible:
                 esDirectivo ||
-                cargos.includes('do') ||
-                cargos.includes('dos') ||
+                cargos.some((c) =>
+                    ['presidente', 'do', 'dos', 'jc', 'lem', 'logistica'].includes(c)
+                ) ||
                 Boolean(permisos.inventario),
             accent: 'from-[#F01436] to-[#A3001B]',
         },

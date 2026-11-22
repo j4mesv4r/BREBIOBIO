@@ -129,7 +129,7 @@ export default function App() {
             element={
               <RutaProtegida
                 rolesPermitidos={['director', 'superadmin']}
-                cargosPermitidos={['do', 'dos']}
+                cargosPermitidos={['presidente', 'do', 'dos', 'jc', 'lem', 'logistica']}
                 moduloRequerido="inventario"
               >
                 <Inventario />

@@ -35,6 +35,7 @@ import {
   ChevronUp,
   ChevronDown,
   RotateCcw,
+  Package,
 } from 'lucide-react';
 
 const TRIAGE_ESTILOS = {
@@ -172,6 +173,14 @@ export default function CentralMando() {
   const [bitacora, setBitacora] = useState([]);
   const [cuadrillas, setCuadrillas] = useState([]);
   const [triages, setTriages] = useState([]);
+  const [inventarioItems, setInventarioItems] = useState([]);
+  const [horasInputs, setHorasInputs] = useState({});
+  const [prestamoForm, setPrestamoForm] = useState({
+    inventario_id: '',
+    responsable: '',
+    cantidad: 1,
+  });
+  const [devolucionObs, setDevolucionObs] = useState({});
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [alertaTactica, setAlertaTactica] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -300,6 +309,12 @@ export default function CentralMando() {
         label: `Bitácora (${bitacora.length})`,
         icon: BookOpen,
         visible: esPmDeEsteCaso || !esPrehosp,
+      },
+      {
+        key: 'equipos',
+        label: 'Equipos',
+        icon: Package,
+        visible: estoyAutorizadoEnCaso,
       },
       {
         key: 'puesto_mando',
@@ -844,7 +859,7 @@ export default function CentralMando() {
 
   const fetchDatosBase = async () => {
     setLoading(true);
-    const [opRes, perfRes] = await Promise.all([
+    const [opRes, perfRes, invRes] = await Promise.all([
       supabase
         .from('operativos')
         .select('*')
@@ -856,10 +871,12 @@ export default function CentralMando() {
         )
         .eq('estado_validacion', 'aprobado')
         .order('nombre_completo', { ascending: true }),
+      supabase.from('inventario').select('*').order('nombre', { ascending: true }),
     ]);
 
     if (!opRes.error) setOperativos(opRes.data || []);
     if (!perfRes.error) setEfectivos(perfRes.data || []);
+    if (!invRes.error) setInventarioItems(invRes.data || []);
     setLoading(false);
   };
 
@@ -1462,6 +1479,101 @@ export default function CentralMando() {
       .eq('id', partId);
 
     if (!error && selectedOp) cargarDetalleOperativo(selectedOp);
+  };
+
+  const handleGuardarHorasParticipante = async (partId) => {
+    const horasVal = parseFloat(horasInputs[partId]);
+    if (Number.isNaN(horasVal) || horasVal < 0) return;
+
+    const { error } = await supabase
+      .from('operativo_participantes')
+      .update({ horas_operativas: horasVal })
+      .eq('id', partId);
+
+    if (error) {
+      setAlertaTactica(error.message);
+    } else if (selectedOp) {
+      cargarDetalleOperativo(selectedOp);
+    }
+  };
+
+  const handleAsignarEquipoOperativo = async (e) => {
+    e.preventDefault();
+    if (!selectedOp || !prestamoForm.inventario_id || !prestamoForm.responsable.trim()) {
+      return;
+    }
+    const item = inventarioItems.find((i) => i.id === prestamoForm.inventario_id);
+    if (!item) return;
+
+    const { error } = await supabase.from('operativo_bitacora').insert([
+      {
+        operativo_id: selectedOp.id,
+        titulo: `[CARGO EQUIPO] ${item.nombre}`,
+        detalle: `Responsable: ${prestamoForm.responsable.trim()} · Cant: ${prestamoForm.cantidad} · Estado salida: ${item.estado} · [INV:${item.id}]`,
+        registrado_por: profile?.id,
+      },
+    ]);
+
+    if (error) {
+      setAlertaTactica(error.message);
+    } else {
+      setPrestamoForm({ inventario_id: '', responsable: '', cantidad: 1 });
+      cargarDetalleOperativo(selectedOp);
+    }
+  };
+
+  const handleRegistrarDevolucionEquipo = async (cargoBitacora, conDano) => {
+    if (!selectedOp) return;
+    const matchInv = (cargoBitacora.detalle || '').match(/\[INV:([^\]]+)\]/);
+    const invId = matchInv?.[1] || null;
+    const nombreEquipo = (cargoBitacora.titulo || '')
+      .replace('[CARGO EQUIPO]', '')
+      .trim();
+    const obs = (devolucionObs[cargoBitacora.id] || '').trim();
+
+    const { error } = await supabase.from('operativo_bitacora').insert([
+      {
+        operativo_id: selectedOp.id,
+        titulo: conDano
+          ? `[DAÑO EQUIPO] ${nombreEquipo}`
+          : `[DEVOLUCIÓN EQUIPO] ${nombreEquipo}`,
+        detalle: `Cierre/Devolución · Condición: ${
+          conDano ? 'Con daño / En revisión' : 'Operativo sin novedades'
+        }${obs ? ` · Obs: ${obs}` : ''}${invId ? ` · [INV:${invId}]` : ''}`,
+        registrado_por: profile?.id,
+      },
+    ]);
+
+    if (error) {
+      setAlertaTactica(error.message);
+      return;
+    }
+
+    if (conDano && invId) {
+      const invObj = inventarioItems.find((i) => i.id === invId);
+      const histPrev = Array.isArray(invObj?.historial_estado)
+        ? invObj.historial_estado
+        : [];
+      await supabase
+        .from('inventario')
+        .update({
+          estado: 'En revisión',
+          historial_estado: [
+            {
+              fecha: new Date().toISOString(),
+              estado: 'En revisión',
+              foto_url: invObj?.foto_url || null,
+              observacion: `Reporte de daño en operativo "${selectedOp.titulo}": ${obs || 'Requiere revisión'}`,
+              autor: profile?.nombre_completo || 'Puesto de Mando',
+            },
+            ...histPrev,
+          ],
+        })
+        .eq('id', invId);
+      fetchDatosBase();
+    }
+
+    cargarDetalleOperativo(selectedOp);
   };
 
   const handleAutorizarInvitadoExterno = async (invId, nuevoEstado) => {
@@ -2129,25 +2241,68 @@ export default function CentralMando() {
                       {participantes.map((p) => (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between rounded-lg border border-neutral-200 p-2.5"
+                          className="space-y-2 rounded-lg border border-neutral-200 p-2.5"
                         >
-                          <div>
-                            <p className="font-black text-neutral-900">
-                              {p.perfiles?.nombre_completo}
-                            </p>
-                            <p className="text-[10px] text-neutral-500">
-                              {p.funcion_terreno} · {p.estado}
-                            </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="font-black text-neutral-900">
+                                {p.perfiles?.nombre_completo}
+                              </p>
+                              <p className="text-[10px] text-neutral-500">
+                                {p.funcion_terreno} · {p.estado}
+                                {p.horas_operativas
+                                  ? ` · ${p.horas_operativas} hrs`
+                                  : ''}
+                              </p>
+                            </div>
+                            {esPmDeEsteCaso && (
+                              <button
+                                type="button"
+                                disabled={p.estado === 'autorizado'}
+                                onClick={() =>
+                                  handleAutorizarParticipante(p.id, 'autorizado')
+                                }
+                                className={`rounded px-2 py-1 text-[10px] font-black uppercase ${
+                                  p.estado === 'autorizado'
+                                    ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700 opacity-75'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                }`}
+                              >
+                                {p.estado === 'autorizado'
+                                  ? 'Autorizado'
+                                  : 'Autorizar'}
+                              </button>
+                            )}
                           </div>
-                          {esPmDeEsteCaso && p.estado === 'solicitado' && (
-                            <button
-                              onClick={() =>
-                                handleAutorizarParticipante(p.id, 'autorizado')
-                              }
-                              className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-black uppercase text-white"
-                            >
-                              Autorizar
-                            </button>
+
+                          {esPmDeEsteCaso && p.estado === 'autorizado' && (
+                            <div className="flex items-center gap-1.5 border-t border-neutral-100 pt-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                placeholder="Hrs op."
+                                value={
+                                  horasInputs[p.id] !== undefined
+                                    ? horasInputs[p.id]
+                                    : p.horas_operativas ?? ''
+                                }
+                                onChange={(e) =>
+                                  setHorasInputs((prev) => ({
+                                    ...prev,
+                                    [p.id]: e.target.value,
+                                  }))
+                                }
+                                className="w-20 rounded border border-neutral-300 px-2 py-1 text-[11px] font-bold"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleGuardarHorasParticipante(p.id)}
+                                className="rounded bg-[#0A0A0A] px-2.5 py-1 text-[10px] font-black uppercase text-[#F2B632]"
+                              >
+                                Registrar Horas
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -2274,14 +2429,20 @@ export default function CentralMando() {
                               >
                                 {info.label}
                               </span>
-                              {esPmDeEsteCaso && !wp.validado && (
+                              {esPmDeEsteCaso && (
                                 <button
+                                  type="button"
+                                  disabled={Boolean(wp.validado)}
                                   onClick={() =>
                                     handleValidarWaypoint(wp.id, true)
                                   }
-                                  className="rounded bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase text-white"
+                                  className={`rounded px-2 py-0.5 text-[9px] font-black uppercase ${
+                                    wp.validado
+                                      ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700 opacity-75'
+                                      : 'bg-emerald-600 text-white'
+                                  }`}
                                 >
-                                  Validar
+                                  {wp.validado ? 'Validado' : 'Validar'}
                                 </button>
                               )}
                             </div>
@@ -2291,6 +2452,142 @@ export default function CentralMando() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                ) : tabTactico === 'equipos' ? (
+                  <div className="space-y-4">
+                    <form
+                      onSubmit={handleAsignarEquipoOperativo}
+                      className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3"
+                    >
+                      <h4 className="font-black uppercase text-neutral-900">
+                        Cargo / Préstamo de Equipo al Operativo
+                      </h4>
+                      <select
+                        required
+                        value={prestamoForm.inventario_id}
+                        onChange={(e) =>
+                          setPrestamoForm({
+                            ...prestamoForm,
+                            inventario_id: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-bold"
+                      >
+                        <option value="">Seleccionar ítem de inventario...</option>
+                        {inventarioItems.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.nombre} ({it.categoria} · {it.estado})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          required
+                          value={prestamoForm.responsable}
+                          onChange={(e) =>
+                            setPrestamoForm({
+                              ...prestamoForm,
+                              responsable: e.target.value,
+                            })
+                          }
+                          placeholder="Voluntario o Cuadrilla responsable"
+                          className="flex-1 rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={prestamoForm.cantidad}
+                          onChange={(e) =>
+                            setPrestamoForm({
+                              ...prestamoForm,
+                              cantidad: Math.max(1, parseInt(e.target.value, 10) || 1),
+                            })
+                          }
+                          className="w-16 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-bold"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full rounded-lg bg-[#0A0A0A] py-2 text-[11px] font-black uppercase text-[#F2B632]"
+                      >
+                        Registrar Entrega de Equipo
+                      </button>
+                    </form>
+
+                    <div className="space-y-2">
+                      <h4 className="font-black uppercase text-neutral-500">
+                        Equipos Asignados y Devoluciones
+                      </h4>
+                      {bitacora
+                        .filter((b) =>
+                          (b.titulo || '').startsWith('[CARGO EQUIPO]')
+                        )
+                        .map((cargo) => (
+                          <div
+                            key={cargo.id}
+                            className="space-y-2 rounded-lg border border-neutral-200 bg-white p-2.5"
+                          >
+                            <p className="font-black text-neutral-900">
+                              {cargo.titulo.replace('[CARGO EQUIPO]', '').trim()}
+                            </p>
+                            <p className="text-[11px] text-neutral-600">
+                              {cargo.detalle}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-2">
+                              <input
+                                type="text"
+                                value={devolucionObs[cargo.id] || ''}
+                                onChange={(e) =>
+                                  setDevolucionObs((prev) => ({
+                                    ...prev,
+                                    [cargo.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Obs. devolución o daño..."
+                                className="flex-1 rounded border border-neutral-300 px-2 py-1 text-[11px]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRegistrarDevolucionEquipo(cargo, false)
+                                }
+                                className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-black uppercase text-white"
+                              >
+                                Devuelto OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRegistrarDevolucionEquipo(cargo, true)
+                                }
+                                className="rounded bg-[#D90429] px-2 py-1 text-[10px] font-black uppercase text-white"
+                              >
+                                Reportar Daño
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      {bitacora
+                        .filter(
+                          (b) =>
+                            (b.titulo || '').startsWith('[DEVOLUCIÓN EQUIPO]') ||
+                            (b.titulo || '').startsWith('[DAÑO EQUIPO]')
+                        )
+                        .map((dev) => (
+                          <div
+                            key={dev.id}
+                            className={`rounded-lg border p-2 text-[11px] ${
+                              (dev.titulo || '').startsWith('[DAÑO EQUIPO]')
+                                ? 'border-red-300 bg-red-50 text-red-900'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                            }`}
+                          >
+                            <p className="font-black">{dev.titulo}</p>
+                            <p>{dev.detalle}</p>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 ) : tabTactico === 'geometrias' ? (

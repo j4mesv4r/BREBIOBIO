@@ -120,6 +120,34 @@ function formatearRutChileno(valor) {
     return `${cuerpoFormateado}-${dv}`;
 }
 
+function evaluarVencimientoPerfil(fechaStr) {
+    if (!fechaStr) return null;
+    const fechaLimpia = String(fechaStr).slice(0, 10);
+    const objetivo = new Date(`${fechaLimpia}T23:59:59`);
+    if (Number.isNaN(objetivo.getTime())) return null;
+    const diasRestantes = Math.ceil(
+        (objetivo.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    if (diasRestantes < 0) {
+        return { estado: 'vencido', diasRestantes, etiqueta: `Vencido (${fechaLimpia})` };
+    }
+    if (diasRestantes <= 15) {
+        return {
+            estado: 'urgente',
+            diasRestantes,
+            etiqueta: `Urgente: vence en ${diasRestantes} día(s)`,
+        };
+    }
+    if (diasRestantes <= 30) {
+        return {
+            estado: 'preventivo',
+            diasRestantes,
+            etiqueta: `Preventivo: vence en ${diasRestantes} día(s)`,
+        };
+    }
+    return { estado: 'ok', diasRestantes, etiqueta: `Vigente (${fechaLimpia})` };
+}
+
 function validarRutChileno(rutFormateado) {
     const limpio = (rutFormateado || '').replace(/[^0-9kK]/g, '').toUpperCase();
     if (limpio.length < 8) return false;
@@ -296,6 +324,7 @@ export default function MiPerfil() {
     const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
     const [certificados, setCertificados] = useState([]);
+    const [participacionesOp, setParticipacionesOp] = useState([]);
     const [nuevoCert, setNuevoCert] = useState({
         titulo_curso: '',
         institucion: 'SENAPRED',
@@ -372,7 +401,10 @@ export default function MiPerfil() {
     }, [profile]);
 
     useEffect(() => {
-        if (user?.id) cargarCertificados();
+        if (user?.id) {
+            cargarCertificados();
+            cargarParticipaciones();
+        }
     }, [user?.id]);
 
     const cargarCertificados = async () => {
@@ -383,6 +415,17 @@ export default function MiPerfil() {
             .order('creado_en', { ascending: false });
 
         if (!error && data) setCertificados(data);
+    };
+
+    const cargarParticipaciones = async () => {
+        const { data, error } = await supabase
+            .from('operativo_participantes')
+            .select('*, operativos(id, titulo, tipo_operativo, estado, creado_en)')
+            .eq('perfil_id', user.id)
+            .eq('estado', 'autorizado')
+            .order('creado_en', { ascending: false });
+
+        if (!error && data) setParticipacionesOp(data);
     };
 
     const calcularEstadoAvatar = () => {
@@ -1086,17 +1129,85 @@ export default function MiPerfil() {
         </div>
     );
 
+    const enfocarSeccionPerfil = (elementId) => {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (typeof el.focus === 'function') el.focus();
+        }
+    };
+
+    const vencimientoCredencial = evaluarVencimientoPerfil(
+        profile?.fecha_vigencia_credencial
+    );
+    const certsPorVencer = certificados
+        .map((c) => {
+            if (c.sin_vencimiento || !c.fecha_vencimiento) return null;
+            const ev = evaluarVencimientoPerfil(c.fecha_vencimiento);
+            return ev && ev.estado !== 'ok' ? { cert: c, ev } : null;
+        })
+        .filter(Boolean);
+
     const renderBannersRecordatorio = () => (
         <div className="mb-6 space-y-3">
             {faltaGrupoSanguineo && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-l-4 border-[#D90429] bg-red-50 p-4 text-xs text-red-950 shadow-sm">
+                <button
+                    type="button"
+                    onClick={() => enfocarSeccionPerfil('select-tipo-sangre')}
+                    className="flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border-l-4 border-[#D90429] bg-red-50 p-4 text-left text-xs text-red-950 shadow-sm transition-colors hover:bg-red-100"
+                >
                     <p className="flex items-center gap-2 font-black uppercase">
                         <HeartPulse size={17} className="shrink-0 text-[#D90429]" />
                         Recordatorio Médico: Tu Grupo Sanguíneo figura como &ldquo;No
                         especificado&rdquo;. Selecciona tu grupo real en tu ficha para
                         respaldo en emergencias.
                     </p>
-                </div>
+                    <span className="text-[11px] font-black uppercase text-[#D90429]">
+                        Completar ahora →
+                    </span>
+                </button>
+            )}
+
+            {vencimientoCredencial && vencimientoCredencial.estado !== 'ok' && (
+                <button
+                    type="button"
+                    onClick={() => enfocarSeccionPerfil('seccion-credencial')}
+                    className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border-l-4 p-4 text-left text-xs shadow-sm transition-colors ${
+                        vencimientoCredencial.estado === 'preventivo'
+                            ? 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100'
+                            : 'border-[#D90429] bg-red-50 text-red-950 hover:bg-red-100'
+                    }`}
+                >
+                    <p className="flex items-center gap-2 font-black uppercase">
+                        <Clock size={17} className="shrink-0 text-[#D90429]" />
+                        Vigencia de Credencial · {vencimientoCredencial.etiqueta}
+                    </p>
+                    <span className="text-[11px] font-black uppercase">
+                        Ver Credencial →
+                    </span>
+                </button>
+            )}
+
+            {certsPorVencer.length > 0 && (
+                <button
+                    type="button"
+                    onClick={() => enfocarSeccionPerfil('seccion-certificados')}
+                    className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border-l-4 p-4 text-left text-xs shadow-sm transition-colors ${
+                        certsPorVencer.some((x) => x.ev.estado !== 'preventivo')
+                            ? 'border-[#D90429] bg-red-50 text-red-950 hover:bg-red-100'
+                            : 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100'
+                    }`}
+                >
+                    <p className="flex items-center gap-2 font-black uppercase">
+                        <AlertCircle size={17} className="shrink-0 text-[#D90429]" />
+                        Alerta de Certificados ({certsPorVencer.length}):{' '}
+                        {certsPorVencer[0].cert.titulo_curso} —{' '}
+                        {certsPorVencer[0].ev.etiqueta}
+                    </p>
+                    <span className="text-[11px] font-black uppercase">
+                        Revisar Certificados →
+                    </span>
+                </button>
             )}
 
             {estadoAvatar.requiereFoto && (
@@ -1497,7 +1608,10 @@ export default function MiPerfil() {
                 </div>
             )}
 
-            <div className="mb-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <div
+                id="seccion-credencial"
+                className="mb-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
+            >
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
                         <CreditCard size={18} className="text-[#D90429]" /> Credencial
@@ -1758,6 +1872,7 @@ export default function MiPerfil() {
                                 Grupo Sanguíneo
                             </label>
                             <select
+                                id="select-tipo-sangre"
                                 value={form.tipo_sangre}
                                 onChange={(e) =>
                                     setForm({ ...form, tipo_sangre: e.target.value })
@@ -1846,7 +1961,10 @@ export default function MiPerfil() {
                     </div>
                 </form>
 
-                <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                <div
+                    id="seccion-certificados"
+                    className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
+                >
                     <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
                         <FileText size={17} className="text-[#D90429]" /> Mis Certificados
                     </h3>
@@ -1919,35 +2037,138 @@ export default function MiPerfil() {
                                 Aún no has cargado certificados.
                             </p>
                         ) : (
-                            certificados.map((c) => (
-                                <div
-                                    key={c.id}
-                                    className="flex items-center justify-between rounded-xl border border-neutral-200 px-3.5 py-2 text-xs"
-                                >
-                                    <div>
-                                        <p className="font-black text-neutral-900">
-                                            {c.titulo_curso}
-                                        </p>
-                                        <p className="text-[11px] text-neutral-500">
-                                            {c.institucion}
-                                            {c.especialidad_vinculada
-                                                ? ` · ${c.especialidad_vinculada}`
-                                                : ''}
-                                        </p>
-                                    </div>
-                                    <span
-                                        className={`rounded-lg px-2 py-0.5 text-[10px] font-black uppercase ${c.estado_validacion === 'aprobado'
-                                                ? 'bg-emerald-100 text-emerald-800'
-                                                : 'bg-amber-100 text-amber-800'
-                                            }`}
+                            certificados.map((c) => {
+                                const sinVenc =
+                                    c.sin_vencimiento === true || !c.fecha_vencimiento;
+                                const evCert = sinVenc
+                                    ? null
+                                    : evaluarVencimientoPerfil(c.fecha_vencimiento);
+
+                                return (
+                                    <div
+                                        key={c.id}
+                                        className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 px-3.5 py-2 text-xs"
                                     >
-                                        {c.estado_validacion}
-                                    </span>
-                                </div>
-                            ))
+                                        <div>
+                                            <p className="font-black text-neutral-900">
+                                                {c.titulo_curso}
+                                            </p>
+                                            <p className="text-[11px] text-neutral-500">
+                                                {c.institucion}
+                                                {c.especialidad_vinculada
+                                                    ? ` · ${c.especialidad_vinculada}`
+                                                    : ''}
+                                            </p>
+                                            <p className="mt-0.5 text-[10px] font-bold">
+                                                {sinVenc ? (
+                                                    <span className="text-neutral-500">
+                                                        No tiene vencimiento
+                                                    </span>
+                                                ) : (
+                                                    evCert && (
+                                                        <span
+                                                            className={
+                                                                evCert.estado === 'preventivo'
+                                                                    ? 'text-amber-700'
+                                                                    : evCert.estado === 'urgente' ||
+                                                                        evCert.estado === 'vencido'
+                                                                        ? 'text-[#D90429]'
+                                                                        : 'text-emerald-700'
+                                                            }
+                                                        >
+                                                            {evCert.etiqueta}
+                                                        </span>
+                                                    )
+                                                )}
+                                            </p>
+                                        </div>
+                                        <span
+                                            className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase ${c.estado_validacion === 'aprobado'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : 'bg-amber-100 text-amber-800'
+                                                }`}
+                                        >
+                                            {c.estado_validacion}
+                                        </span>
+                                    </div>
+                                );
+                            })
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Participación en Operativos y Horas Acumuladas */}
+            <div className="mt-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                        <Clock size={17} className="text-[#D90429]" /> Participación en
+                        Operativos y Horas Acumuladas
+                    </h3>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-xl bg-[#0A0A0A] px-3 py-1.5 font-black text-[#F2B632]">
+                            Total:{' '}
+                            {participacionesOp
+                                .reduce((acc, p) => acc + (Number(p.horas_operativas) || 0), 0)
+                                .toFixed(1)}{' '}
+                            hrs
+                        </span>
+                        <span className="rounded-xl bg-red-50 px-3 py-1.5 font-black text-[#D90429]">
+                            Reales:{' '}
+                            {
+                                participacionesOp.filter(
+                                    (p) => p.operativos?.tipo_operativo !== 'simulacro'
+                                ).length
+                            }
+                        </span>
+                        <span className="rounded-xl bg-purple-50 px-3 py-1.5 font-black text-purple-800">
+                            Simulacros:{' '}
+                            {
+                                participacionesOp.filter(
+                                    (p) => p.operativos?.tipo_operativo === 'simulacro'
+                                ).length
+                            }
+                        </span>
+                    </div>
+                </div>
+
+                {participacionesOp.length === 0 ? (
+                    <p className="text-xs font-semibold text-neutral-400">
+                        Aún no registras participaciones autorizadas en operativos o simulacros.
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {participacionesOp.map((p) => (
+                            <div
+                                key={p.id}
+                                className="rounded-xl border border-neutral-200 bg-neutral-50 p-3.5 text-xs"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span
+                                        className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${
+                                            p.operativos?.tipo_operativo === 'simulacro'
+                                                ? 'bg-purple-100 text-purple-800'
+                                                : 'bg-red-100 text-[#D90429]'
+                                        }`}
+                                    >
+                                        {p.operativos?.tipo_operativo === 'simulacro'
+                                            ? 'Simulacro'
+                                            : 'Emergencia Real'}
+                                    </span>
+                                    <span className="font-black text-neutral-900">
+                                        {Number(p.horas_operativas || 0).toFixed(1)} hrs
+                                    </span>
+                                </div>
+                                <p className="mt-1.5 font-black text-neutral-950">
+                                    {p.operativos?.titulo || 'Operativo BRE'}
+                                </p>
+                                <p className="mt-0.5 text-[11px] font-semibold text-neutral-500">
+                                    Función: {p.funcion_terreno || 'Operativo'}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     );

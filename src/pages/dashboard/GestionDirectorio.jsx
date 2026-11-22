@@ -28,6 +28,9 @@ import {
   Edit3,
   Save,
   X,
+  Printer,
+  Clock,
+  Upload,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { supabase } from '../../lib/supabase';
@@ -265,6 +268,42 @@ const CAMPOS_VISIBILIDAD = [
   { key: 'telefono', label: 'Teléfono' },
 ];
 
+function evaluarVencimiento(fechaStr) {
+  if (!fechaStr) return null;
+  const fechaLimpia = String(fechaStr).slice(0, 10);
+  const objetivo = new Date(`${fechaLimpia}T23:59:59`);
+  if (Number.isNaN(objetivo.getTime())) return null;
+  const diasRestantes = Math.ceil(
+    (objetivo.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+  if (diasRestantes < 0) {
+    return {
+      estado: 'vencido',
+      diasRestantes,
+      etiqueta: `Vencido (${fechaLimpia})`,
+    };
+  }
+  if (diasRestantes <= 15) {
+    return {
+      estado: 'urgente',
+      diasRestantes,
+      etiqueta: `Urgente: vence en ${diasRestantes} día(s)`,
+    };
+  }
+  if (diasRestantes <= 30) {
+    return {
+      estado: 'preventivo',
+      diasRestantes,
+      etiqueta: `Preventivo: vence en ${diasRestantes} día(s)`,
+    };
+  }
+  return {
+    estado: 'ok',
+    diasRestantes,
+    etiqueta: `Vigente hasta ${fechaLimpia}`,
+  };
+}
+
 export default function GestionDirectorio() {
   const { profile: currentProfile } = useAuth();
   const [tab, setTab] = useState('miembros');
@@ -305,6 +344,17 @@ export default function GestionDirectorio() {
   });
   const [inputEspFicha, setInputEspFicha] = useState('');
   const [mostrarSugerenciasEsp, setMostrarSugerenciasEsp] = useState(false);
+  const [participacionesOp, setParticipacionesOp] = useState([]);
+  const [nuevoCertForm, setNuevoCertForm] = useState({
+    perfil_id: '',
+    titulo_curso: '',
+    institucion: 'O.N.G. BRE Bío-Bío',
+    especialidad_vinculada: '',
+    sin_vencimiento: true,
+    fecha_vencimiento: '',
+  });
+  const [archivoNuevoCert, setArchivoNuevoCert] = useState(null);
+  const [creandoCert, setCreandoCert] = useState(false);
 
   const rolActual = (currentProfile?.rol || '').toLowerCase();
   const cargosActuales = Array.isArray(currentProfile?.cargos_operativos)
@@ -314,10 +364,13 @@ export default function GestionDirectorio() {
   const esSA = rolActual === 'superadmin';
   const esDG = rolActual === 'director';
   const esDO = cargosActuales.includes('do');
+  const esDOs = cargosActuales.includes('dos');
+  const esInstructor = cargosActuales.includes('instructor');
   const esLEM = cargosActuales.includes('lem');
   const esSecretario = cargosActuales.includes('secretario');
 
   const puedeEditarVisibilidad = esSA || esDG || esSecretario;
+  const puedeAgregarCertificado = esSA || esInstructor || esDO || esDOs;
 
   const puedeAsignarCargo = (claveCargo) => {
     if (esSA || esDG) return true;
@@ -330,7 +383,7 @@ export default function GestionDirectorio() {
   const cargarDatos = async () => {
     setLoading(true);
     setAlerta('');
-    const [certsRes, solRes, perfRes, notifRes] = await Promise.all([
+    const [certsRes, solRes, perfRes, notifRes, partRes] = await Promise.all([
       supabase
         .from('certificados')
         .select('*, perfiles(id, nombre_completo, rut, rol, cargos_operativos)')
@@ -348,6 +401,9 @@ export default function GestionDirectorio() {
         .select('*')
         .order('creado_en', { ascending: false })
         .limit(25),
+      supabase
+        .from('operativo_participantes')
+        .select('*, operativos(id, titulo, tipo_operativo, estado, creado_en)'),
     ]);
 
     if (!certsRes.error && certsRes.data) setCertificados(certsRes.data);
@@ -359,6 +415,9 @@ export default function GestionDirectorio() {
     }
     if (!notifRes.error && notifRes.data) {
       setNotificaciones(notifRes.data);
+    }
+    if (!partRes.error && partRes.data) {
+      setParticipacionesOp(partRes.data);
     }
     setLoading(false);
   };
@@ -376,7 +435,300 @@ export default function GestionDirectorio() {
   const postulantesPendientes = listaPostulantes.filter(
     (p) => (p.estado_validacion || 'pendiente') === 'pendiente'
   );
+  const certificadosPendientes = certificados.filter(
+    (c) => (c.estado_validacion || 'pendiente') === 'pendiente'
+  );
+  const solicitudesPendientes = solicitudes.filter(
+    (s) => (s.estado || 'Pendiente').toLowerCase() === 'pendiente'
+  );
+  const perfilesConEspPendientes = perfiles.filter(
+    (p) =>
+      Array.isArray(p.especialidades_pendientes) &&
+      p.especialidades_pendientes.length > 0
+  );
+  const vencimientosProximos = [
+    ...perfiles
+      .map((p) => {
+        const ev = evaluarVencimiento(p.fecha_vigencia_credencial);
+        return ev && ev.estado !== 'ok'
+          ? {
+              tipo: 'credencial',
+              tab: (p.rol || 'postulante').toLowerCase() === 'postulante' ? 'postulantes' : 'miembros',
+              elementId: `persona-${p.id}`,
+              perfilId: p.id,
+              titulo: `Credencial de ${p.nombre_completo}`,
+              ev,
+            }
+          : null;
+      })
+      .filter(Boolean),
+    ...certificados
+      .map((c) => {
+        if (c.sin_vencimiento || !c.fecha_vencimiento) return null;
+        const ev = evaluarVencimiento(c.fecha_vencimiento);
+        return ev && ev.estado !== 'ok'
+          ? {
+              tipo: 'certificado',
+              tab: 'certificados',
+              elementId: `cert-${c.id}`,
+              perfilId: c.perfil_id,
+              titulo: `Curso "${c.titulo_curso}" (${c.perfiles?.nombre_completo || 'Voluntario'})`,
+              ev,
+            }
+          : null;
+      })
+      .filter(Boolean),
+  ];
+
   const alertasSinLeer = notificaciones.filter((n) => !n.leida);
+
+  const irATabYElemento = (targetTab, elementId, perfilIdAExpandir = null) => {
+    setTab(targetTab);
+    if (perfilIdAExpandir) {
+      setPanelAbiertoId(perfilIdAExpandir);
+    }
+    setTimeout(() => {
+      const el = elementId ? document.getElementById(elementId) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
+  };
+
+  const navegarDesdeNotificacion = (n) => {
+    const texto = `${n.tipo || ''} ${n.titulo || ''} ${n.detalle || ''}`.toLowerCase();
+    if (texto.includes('certificado') || texto.includes('curso')) {
+      irATabYElemento(
+        'certificados',
+        n.referencia_id ? `cert-${n.referencia_id}` : 'panel-certificados'
+      );
+      return;
+    }
+    if (texto.includes('solicitud') || texto.includes('apoyo')) {
+      irATabYElemento('solicitudes', 'panel-solicitudes');
+      return;
+    }
+    const perfilRelacionado = perfiles.find((p) => p.id === n.perfil_id);
+    if (
+      texto.includes('postul') ||
+      (perfilRelacionado && (perfilRelacionado.rol || '').toLowerCase() === 'postulante')
+    ) {
+      irATabYElemento(
+        'postulantes',
+        n.perfil_id ? `persona-${n.perfil_id}` : null,
+        n.perfil_id || null
+      );
+      return;
+    }
+    irATabYElemento(
+      'miembros',
+      n.perfil_id ? `persona-${n.perfil_id}` : null,
+      n.perfil_id || null
+    );
+  };
+
+  const handleCrearCertificadoDirectorio = async (e) => {
+    e.preventDefault();
+    if (!nuevoCertForm.perfil_id || !nuevoCertForm.titulo_curso.trim()) return;
+    setCreandoCert(true);
+    setAlerta('');
+    setInfoExito('');
+
+    try {
+      let archivoUrl = null;
+      if (archivoNuevoCert) {
+        const ext = archivoNuevoCert.name.split('.').pop() || 'pdf';
+        const path = `${nuevoCertForm.perfil_id}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from('certificados')
+          .upload(path, archivoNuevoCert, { upsert: true });
+        if (upErr) throw upErr;
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('certificados').getPublicUrl(path);
+        archivoUrl = publicUrl;
+      }
+
+      const payloadBase = {
+        perfil_id: nuevoCertForm.perfil_id,
+        titulo_curso: nuevoCertForm.titulo_curso.trim(),
+        institucion: nuevoCertForm.institucion.trim() || 'O.N.G. BRE Bío-Bío',
+        especialidad_vinculada: nuevoCertForm.especialidad_vinculada || null,
+        archivo_url: archivoUrl,
+        estado_validacion: 'aprobado',
+      };
+
+      const payloadConVencimiento = {
+        ...payloadBase,
+        sin_vencimiento: Boolean(nuevoCertForm.sin_vencimiento),
+        fecha_vencimiento: nuevoCertForm.sin_vencimiento
+          ? null
+          : nuevoCertForm.fecha_vencimiento || null,
+      };
+
+      let { error } = await supabase
+        .from('certificados')
+        .insert([payloadConVencimiento]);
+
+      if (error && /sin_vencimiento|fecha_vencimiento/i.test(error.message || '')) {
+        const resFallback = await supabase.from('certificados').insert([payloadBase]);
+        error = resFallback.error;
+      }
+
+      if (error) throw error;
+
+      if (nuevoCertForm.especialidad_vinculada) {
+        const dueno = perfiles.find((p) => p.id === nuevoCertForm.perfil_id);
+        if (dueno) {
+          const validadas = Array.isArray(dueno.especialidades_validadas)
+            ? dueno.especialidades_validadas
+            : [];
+          if (!validadas.includes(nuevoCertForm.especialidad_vinculada)) {
+            await supabase
+              .from('perfiles')
+              .update({
+                especialidades_validadas: [
+                  ...validadas,
+                  nuevoCertForm.especialidad_vinculada,
+                ],
+              })
+              .eq('id', dueno.id);
+          }
+        }
+      }
+
+      setNuevoCertForm({
+        perfil_id: '',
+        titulo_curso: '',
+        institucion: 'O.N.G. BRE Bío-Bío',
+        especialidad_vinculada: '',
+        sin_vencimiento: true,
+        fecha_vencimiento: '',
+      });
+      setArchivoNuevoCert(null);
+      setInfoExito('Curso / certificado agregado y validado correctamente.');
+      await cargarDatos();
+    } catch (err) {
+      setAlerta(err.message || 'No se pudo registrar el certificado.');
+    } finally {
+      setCreandoCert(false);
+    }
+  };
+
+  const exportarNominaCSV = () => {
+    const escapar = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const encabezados = [
+      'Codigo Credencial',
+      'Nombre Completo',
+      'RUT',
+      'Rol',
+      'Cargos Operativos',
+      'Especialidades Validadas',
+      'Cursos / Certificados',
+      'Vigencia Credencial',
+      'Telefono',
+      'Email',
+    ];
+    const filas = listaMiembros.map((m) => {
+      const certsMiembro = certificados
+        .filter((c) => c.perfil_id === m.id)
+        .map((c) => {
+          const v =
+            c.sin_vencimiento || !c.fecha_vencimiento
+              ? 'No tiene vencimiento'
+              : `Vence: ${String(c.fecha_vencimiento).slice(0, 10)}`;
+          return `${c.titulo_curso} (${c.estado_validacion}, ${v})`;
+        })
+        .join(' | ');
+      const cargosTxt = Array.isArray(m.cargos_operativos)
+        ? m.cargos_operativos.join(', ')
+        : '';
+      const espTxt = Array.isArray(m.especialidades_validadas)
+        ? m.especialidades_validadas.join(', ')
+        : '';
+      return [
+        m.codigo_credencial || '',
+        m.nombre_completo || '',
+        m.rut || '',
+        m.rol || '',
+        cargosTxt,
+        espTxt,
+        certsMiembro,
+        m.fecha_vigencia_credencial
+          ? String(m.fecha_vigencia_credencial).slice(0, 10)
+          : 'Anual estándar',
+        m.telefono || '',
+        m.email || '',
+      ]
+        .map(escapar)
+        .join(',');
+    });
+    const csv = `\uFEFF${[encabezados.map(escapar).join(','), ...filas].join('\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Certificados_BRE_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const abrirVistaImprimible = () => {
+    const ventana = window.open('', '_blank');
+    if (!ventana) {
+      window.print();
+      return;
+    }
+    const filas = listaMiembros
+      .map((m) => {
+        const esp = Array.isArray(m.especialidades_validadas)
+          ? m.especialidades_validadas.join(', ')
+          : '—';
+        const certs = certificados
+          .filter((c) => c.perfil_id === m.id)
+          .map(
+            (c) =>
+              `${c.titulo_curso} (${
+                c.sin_vencimiento || !c.fecha_vencimiento
+                  ? 'No tiene vencimiento'
+                  : `Vence ${String(c.fecha_vencimiento).slice(0, 10)}`
+              })`
+          )
+          .join('<br/>');
+        return `<tr>
+          <td style="padding:6px;border:1px solid #ccc;"><strong>${m.codigo_credencial || '—'}</strong></td>
+          <td style="padding:6px;border:1px solid #ccc;">${m.nombre_completo || '—'}<br/><small>${m.rut || ''}</small></td>
+          <td style="padding:6px;border:1px solid #ccc;text-transform:uppercase;">${m.rol || ''}</td>
+          <td style="padding:6px;border:1px solid #ccc;">${esp || '—'}</td>
+          <td style="padding:6px;border:1px solid #ccc;">${certs || 'Sin cursos'}</td>
+        </tr>`;
+      })
+      .join('');
+
+    ventana.document.write(`
+      <html>
+        <head><title>Nómina Activa y Certificados · O.N.G. BRE Bío-Bío</title></head>
+        <body style="font-family:Arial,sans-serif;padding:24px;color:#111;">
+          <h2 style="margin:0;color:#D90429;">O.N.G. BRE BÍO-BÍO · NÓMINA ACTIVA Y CERTIFICADOS</h2>
+          <p style="font-size:12px;color:#555;">Emitido el ${new Date().toLocaleString('es-CL')} · Total miembros activos: ${listaMiembros.length}</p>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:12px;">
+            <thead>
+              <tr style="background:#0A0A0A;color:#F2B632;text-align:left;">
+                <th style="padding:8px;border:1px solid #0A0A0A;">Credencial</th>
+                <th style="padding:8px;border:1px solid #0A0A0A;">Voluntario / RUT</th>
+                <th style="padding:8px;border:1px solid #0A0A0A;">Rol</th>
+                <th style="padding:8px;border:1px solid #0A0A0A;">Especialidades</th>
+                <th style="padding:8px;border:1px solid #0A0A0A;">Certificados / Cursos</th>
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>
+          <script>window.onload = function(){ window.print(); };</script>
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+  };
 
   const marcarNotificacionLeida = async (id) => {
     const { error } = await supabase
@@ -1394,10 +1746,19 @@ export default function GestionDirectorio() {
       !esSA && (rolObjetivo === 'superadmin' || rolObjetivo === 'director');
 
     const expandido = panelAbiertoId === m.id;
+    const vencimientoCred = evaluarVencimiento(m.fecha_vigencia_credencial);
+    const partMiembro = participacionesOp.filter(
+      (p) => p.perfil_id === m.id && p.estado === 'autorizado'
+    );
+    const totalHorasOp = partMiembro.reduce(
+      (acc, p) => acc + (Number(p.horas_operativas) || 0),
+      0
+    );
 
     return (
       <div
         key={m.id}
+        id={`persona-${m.id}`}
         className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm"
       >
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -1449,6 +1810,18 @@ export default function GestionDirectorio() {
                     Menor Autorizado (16-17)
                   </span>
                 )}
+
+                {vencimientoCred && vencimientoCred.estado !== 'ok' && (
+                  <span
+                    className={`rounded-lg px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                      vencimientoCred.estado === 'preventivo'
+                        ? 'bg-amber-100 text-amber-900'
+                        : 'bg-red-100 text-[#D90429]'
+                    }`}
+                  >
+                    Credencial · {vencimientoCred.etiqueta}
+                  </span>
+                )}
               </div>
 
               <p className="text-xs font-semibold text-neutral-600">
@@ -1487,14 +1860,19 @@ export default function GestionDirectorio() {
               </span>
             ) : esPostulanteTab ? (
               <>
-                {m.estado_validacion !== 'aprobado' && (
-                  <button
-                    onClick={() => validarMiembro(m, 'aprobado', 'postulante')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-emerald-700"
-                  >
-                    <CheckCircle size={15} strokeWidth={2.5} /> Autorizar
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={m.estado_validacion === 'aprobado'}
+                  onClick={() => validarMiembro(m, 'aprobado', 'postulante')}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black uppercase ${
+                    m.estado_validacion === 'aprobado'
+                      ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700 opacity-75'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
+                >
+                  <CheckCircle size={15} strokeWidth={2.5} />{' '}
+                  {m.estado_validacion === 'aprobado' ? 'Autorizado' : 'Autorizar'}
+                </button>
 
                 <button
                   onClick={() => validarMiembro(m, 'aprobado', 'voluntario')}
@@ -1530,14 +1908,19 @@ export default function GestionDirectorio() {
                   )}
                 </select>
 
-                {m.estado_validacion !== 'aprobado' && (
-                  <button
-                    onClick={() => validarMiembro(m, 'aprobado')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-black uppercase text-white hover:bg-emerald-700"
-                  >
-                    <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={m.estado_validacion === 'aprobado'}
+                  onClick={() => validarMiembro(m, 'aprobado')}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black uppercase ${
+                    m.estado_validacion === 'aprobado'
+                      ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700 opacity-75'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
+                >
+                  <CheckCircle size={15} strokeWidth={2.5} />{' '}
+                  {m.estado_validacion === 'aprobado' ? 'Aprobado' : 'Aprobar'}
+                </button>
 
                 <button
                   type="button"
@@ -2010,6 +2393,33 @@ export default function GestionDirectorio() {
 
                 <div className="rounded-lg border border-neutral-200 bg-white p-3 sm:col-span-3">
                   <span className="block text-[10px] font-black uppercase text-neutral-500">
+                    Participación Operativa y Horas Acumuladas
+                  </span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[#0A0A0A] px-2.5 py-1 font-black text-[#F2B632]">
+                      <Clock size={13} /> {totalHorasOp.toFixed(1)} hrs operativas
+                    </span>
+                    <span className="rounded-md bg-red-50 px-2.5 py-1 font-black text-[#D90429]">
+                      Reales:{' '}
+                      {
+                        partMiembro.filter(
+                          (p) => p.operativos?.tipo_operativo !== 'simulacro'
+                        ).length
+                      }
+                    </span>
+                    <span className="rounded-md bg-purple-50 px-2.5 py-1 font-black text-purple-800">
+                      Simulacros:{' '}
+                      {
+                        partMiembro.filter(
+                          (p) => p.operativos?.tipo_operativo === 'simulacro'
+                        ).length
+                      }
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 sm:col-span-3">
+                  <span className="block text-[10px] font-black uppercase text-neutral-500">
                     Vigencia de Credencial (Opcional)
                   </span>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -2337,7 +2747,100 @@ export default function GestionDirectorio() {
         </div>
       )}
 
-      {/* Notificaciones para el Directorio */}
+      {/* Resumen de Alertas Accionables (Clicables -> Navegación directa) */}
+      {(certificadosPendientes.length > 0 ||
+        postulantesPendientes.length > 0 ||
+        solicitudesPendientes.length > 0 ||
+        perfilesConEspPendientes.length > 0 ||
+        vencimientosProximos.length > 0) && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {certificadosPendientes.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                irATabYElemento(
+                  'certificados',
+                  `cert-${certificadosPendientes[0].id}`
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-black text-amber-950 shadow-sm hover:bg-amber-100"
+            >
+              <Bell size={14} className="text-[#D90429]" />
+              <span>
+                {certificadosPendientes.length} Certificado(s) por validar →
+              </span>
+            </button>
+          )}
+          {postulantesPendientes.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                irATabYElemento(
+                  'postulantes',
+                  `persona-${postulantesPendientes[0].id}`,
+                  postulantesPendientes[0].id
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-red-50 px-3.5 py-2 text-xs font-black text-[#D90429] shadow-sm hover:bg-red-100"
+            >
+              <UserCheck size={14} />
+              <span>
+                {postulantesPendientes.length} Postulación(es) pendiente(s) →
+              </span>
+            </button>
+          )}
+          {perfilesConEspPendientes.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                irATabYElemento(
+                  'miembros',
+                  `persona-${perfilesConEspPendientes[0].id}`,
+                  perfilesConEspPendientes[0].id
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-black text-amber-950 shadow-sm hover:bg-amber-100"
+            >
+              <Award size={14} className="text-[#D90429]" />
+              <span>
+                {perfilesConEspPendientes.length} Miembro(s) con especialidades por validar →
+              </span>
+            </button>
+          )}
+          {solicitudesPendientes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => irATabYElemento('solicitudes', 'panel-solicitudes')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-red-50 px-3.5 py-2 text-xs font-black text-red-900 shadow-sm hover:bg-red-100"
+            >
+              <Siren size={14} className="text-[#D90429]" />
+              <span>
+                {solicitudesPendientes.length} Solicitud(es) de apoyo pendiente(s) →
+              </span>
+            </button>
+          )}
+          {vencimientosProximos.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                irATabYElemento(
+                  vencimientosProximos[0].tab,
+                  vencimientosProximos[0].elementId,
+                  vencimientosProximos[0].perfilId
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-400 bg-red-100 px-3.5 py-2 text-xs font-black text-red-950 shadow-sm hover:bg-red-200"
+            >
+              <Clock size={14} className="text-[#D90429]" />
+              <span>
+                {vencimientosProximos.length} Vencimiento(s) (≤30 / ≤15 días) →
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Notificaciones para el Directorio (Clicables -> Navegación directa) */}
       {alertasSinLeer.length > 0 && (
         <div className="mb-6 space-y-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
           <p className="flex items-center gap-1.5 text-xs font-black uppercase text-amber-950">
@@ -2348,17 +2851,26 @@ export default function GestionDirectorio() {
           {alertasSinLeer.map((n) => (
             <div
               key={n.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3.5 py-2 text-xs"
+              onClick={() => navegarDesdeNotificacion(n)}
+              className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3.5 py-2 text-xs transition-colors hover:border-[#D90429] hover:bg-amber-50/40"
             >
               <div>
-                <p className="font-black text-neutral-900">{n.titulo}</p>
+                <p className="font-black text-neutral-900">
+                  {n.titulo}{' '}
+                  <span className="ml-1 text-[10px] font-black uppercase text-[#D90429]">
+                    · Ir a resolver →
+                  </span>
+                </p>
                 {n.detalle && (
                   <p className="text-[11px] text-neutral-600">{n.detalle}</p>
                 )}
               </div>
               <button
                 type="button"
-                onClick={() => marcarNotificacionLeida(n.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  marcarNotificacionLeida(n.id);
+                }}
                 className="rounded-lg bg-[#0A0A0A] px-2.5 py-1 text-[10px] font-black uppercase text-[#F2B632]"
               >
                 Marcar Leída
@@ -2414,14 +2926,34 @@ export default function GestionDirectorio() {
           Solicitudes de Apoyo ({solicitudes.length})
         </button>
 
-        <button
-          type="button"
-          onClick={() => setShowNuevoPerfil((prev) => !prev)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
-        >
-          <UserPlus size={14} />
-          <span>Agregar Perfil</span>
-        </button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={exportarNominaCSV}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-neutral-800 hover:bg-neutral-100"
+          >
+            <Download size={14} />
+            <span>Exportar CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={abrirVistaImprimible}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-neutral-800 hover:bg-neutral-100"
+          >
+            <Printer size={14} />
+            <span>Vista Imprimible</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowNuevoPerfil((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-xs font-black uppercase tracking-wider text-[#F2B632] hover:bg-neutral-800"
+          >
+            <UserPlus size={14} />
+            <span>Agregar Perfil</span>
+          </button>
+        </div>
       </div>
 
       {showNuevoPerfil && (
@@ -2504,83 +3036,275 @@ export default function GestionDirectorio() {
           )}
         </div>
       ) : tab === 'certificados' ? (
-        <div className="space-y-4">
+        <div id="panel-certificados" className="space-y-5">
+          {puedeAgregarCertificado && (
+            <form
+              onSubmit={handleCrearCertificadoDirectorio}
+              className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm"
+            >
+              <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-neutral-900">
+                <Award size={16} className="text-[#D90429]" />
+                Agregar Curso / Certificado a Voluntario o Postulante
+              </h3>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <select
+                  required
+                  value={nuevoCertForm.perfil_id}
+                  onChange={(e) =>
+                    setNuevoCertForm({
+                      ...nuevoCertForm,
+                      perfil_id: e.target.value,
+                    })
+                  }
+                  className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
+                >
+                  <option value="">Seleccionar voluntario / postulante...</option>
+                  {perfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre_completo || p.email} ({(p.rol || 'postulante').toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  required
+                  value={nuevoCertForm.titulo_curso}
+                  onChange={(e) =>
+                    setNuevoCertForm({
+                      ...nuevoCertForm,
+                      titulo_curso: e.target.value,
+                    })
+                  }
+                  placeholder="Nombre del curso / certificación *"
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+                />
+
+                <input
+                  type="text"
+                  value={nuevoCertForm.institucion}
+                  onChange={(e) =>
+                    setNuevoCertForm({
+                      ...nuevoCertForm,
+                      institucion: e.target.value,
+                    })
+                  }
+                  placeholder="Institución emisora"
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold"
+                />
+
+                <select
+                  value={nuevoCertForm.especialidad_vinculada}
+                  onChange={(e) =>
+                    setNuevoCertForm({
+                      ...nuevoCertForm,
+                      especialidad_vinculada: e.target.value,
+                    })
+                  }
+                  className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold"
+                >
+                  <option value="">Sin especialidad vinculada</option>
+                  {ESPECIALIDADES_CATALOGO.map((esp) => (
+                    <option key={esp.nombre} value={esp.nombre}>
+                      {esp.nombre} ({esp.abrev})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-black text-neutral-900">
+                    <input
+                      type="checkbox"
+                      checked={nuevoCertForm.sin_vencimiento}
+                      onChange={(e) =>
+                        setNuevoCertForm({
+                          ...nuevoCertForm,
+                          sin_vencimiento: e.target.checked,
+                          fecha_vencimiento: e.target.checked
+                            ? ''
+                            : nuevoCertForm.fecha_vencimiento,
+                        })
+                      }
+                      className="h-4 w-4 rounded text-[#D90429]"
+                    />
+                    <span>No tiene vencimiento</span>
+                  </label>
+
+                  {!nuevoCertForm.sin_vencimiento && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-black uppercase text-neutral-600">
+                        Vence el:
+                      </span>
+                      <input
+                        type="date"
+                        required
+                        value={nuevoCertForm.fecha_vencimiento}
+                        onChange={(e) =>
+                          setNuevoCertForm({
+                            ...nuevoCertForm,
+                            fecha_vencimiento: e.target.value,
+                          })
+                        }
+                        className="rounded-xl border border-neutral-300 px-3 py-1.5 text-xs font-bold"
+                      />
+                    </div>
+                  )}
+
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2 text-xs font-bold text-neutral-700 hover:bg-neutral-100">
+                    <Upload size={14} className="text-[#D90429]" />
+                    <span>
+                      {archivoNuevoCert
+                        ? archivoNuevoCert.name
+                        : 'Adjuntar PDF / Imagen (opcional)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      onChange={(e) =>
+                        setArchivoNuevoCert(e.target.files?.[0] || null)
+                      }
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={creandoCert}
+                  className="rounded-xl bg-[#D90429] px-5 py-2 text-xs font-black uppercase text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {creandoCert ? 'Guardando...' : 'Agregar Certificado'}
+                </button>
+              </div>
+            </form>
+          )}
+
           {certificados.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm font-semibold text-neutral-500">
               No hay certificados registrados.
             </p>
           ) : (
-            certificados.map((cert) => (
-              <div
-                key={cert.id}
-                className="flex flex-col justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-neutral-900">
-                      {cert.titulo_curso}
-                    </h3>
-                    <span className="rounded-lg bg-neutral-100 px-2.5 py-0.5 text-[11px] font-black uppercase text-neutral-700">
-                      {cert.estado_validacion}
-                    </span>
+            certificados.map((cert) => {
+              const yaAprobado = cert.estado_validacion === 'aprobado';
+              const sinVenc =
+                cert.sin_vencimiento === true || !cert.fecha_vencimiento;
+              const evCert = sinVenc
+                ? null
+                : evaluarVencimiento(cert.fecha_vencimiento);
+
+              return (
+                <div
+                  key={cert.id}
+                  id={`cert-${cert.id}`}
+                  className="flex flex-col justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-black text-neutral-900">
+                        {cert.titulo_curso}
+                      </h3>
+                      <span
+                        className={`rounded-lg px-2.5 py-0.5 text-[11px] font-black uppercase ${
+                          yaAprobado
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : cert.estado_validacion === 'rechazado'
+                              ? 'bg-red-100 text-[#D90429]'
+                              : 'bg-amber-100 text-amber-900'
+                        }`}
+                      >
+                        {cert.estado_validacion}
+                      </span>
+                      {sinVenc ? (
+                        <span className="rounded-lg bg-neutral-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-neutral-700">
+                          No tiene vencimiento
+                        </span>
+                      ) : (
+                        evCert && (
+                          <span
+                            className={`rounded-lg px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                              evCert.estado === 'preventivo'
+                                ? 'bg-amber-100 text-amber-900'
+                                : evCert.estado === 'urgente' ||
+                                    evCert.estado === 'vencido'
+                                  ? 'bg-red-100 text-[#D90429]'
+                                  : 'bg-emerald-50 text-emerald-800'
+                            }`}
+                          >
+                            {evCert.etiqueta}
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold text-neutral-600">
+                      {cert.perfiles?.nombre_completo || 'Sin nombre'} (
+                      {cert.perfiles?.rut || 'Sin RUT'}) — Rol:{' '}
+                      <strong className="uppercase">{cert.perfiles?.rol}</strong>
+                    </p>
+                    <p className="text-xs text-neutral-400">
+                      Institución: {cert.institucion || 'No indicada'}
+                      {cert.especialidad_vinculada
+                        ? ` · Especialidad vinculada: ${cert.especialidad_vinculada}`
+                        : ''}
+                    </p>
                   </div>
-                  <p className="text-xs font-semibold text-neutral-600">
-                    {cert.perfiles?.nombre_completo || 'Sin nombre'} (
-                    {cert.perfiles?.rut || 'Sin RUT'}) — Rol:{' '}
-                    <strong className="uppercase">{cert.perfiles?.rol}</strong>
-                  </p>
-                  <p className="text-xs text-neutral-400">
-                    Institución: {cert.institucion || 'No indicada'}
-                    {cert.especialidad_vinculada
-                      ? ` · Especialidad vinculada: ${cert.especialidad_vinculada}`
-                      : ''}
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  {cert.archivo_url && (
-                    <a
-                      href={cert.archivo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 px-3 py-2 text-xs font-black uppercase text-neutral-700 hover:bg-neutral-100"
-                    >
-                      <FileText size={15} strokeWidth={2.5} /> Ver PDF
-                    </a>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {cert.archivo_url && (
+                      <a
+                        href={cert.archivo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 px-3 py-2 text-xs font-black uppercase text-neutral-700 hover:bg-neutral-100"
+                      >
+                        <FileText size={15} strokeWidth={2.5} /> Ver PDF
+                      </a>
+                    )}
 
-                  <button
-                    onClick={() => validarCertificado(cert, 'aprobado')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-green-700"
-                  >
-                    <CheckCircle size={15} strokeWidth={2.5} /> Aprobar
-                  </button>
-
-                  <button
-                    onClick={() => validarCertificado(cert, 'rechazado')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-3 py-2 text-xs font-black uppercase text-white hover:bg-red-700"
-                  >
-                    <XCircle size={15} strokeWidth={2.5} /> Rechazar
-                  </button>
-
-                  {cert.perfiles?.rol === 'postulante' && (
                     <button
-                      onClick={() =>
-                        cambiarRolMiembro(cert.perfiles, 'voluntario')
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-white hover:bg-neutral-800"
+                      type="button"
+                      disabled={yaAprobado}
+                      onClick={() => validarCertificado(cert, 'aprobado')}
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black uppercase ${
+                        yaAprobado
+                          ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700 opacity-75'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
                     >
-                      <UserCheck size={15} strokeWidth={2.5} /> Ascender a
-                      Voluntario
+                      <CheckCircle size={15} strokeWidth={2.5} />{' '}
+                      {yaAprobado ? 'Aprobado' : 'Aprobar'}
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={() => validarCertificado(cert, 'rechazado')}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#D90429] px-3 py-2 text-xs font-black uppercase text-white hover:bg-red-700"
+                    >
+                      <XCircle size={15} strokeWidth={2.5} /> Rechazar
+                    </button>
+
+                    {cert.perfiles?.rol === 'postulante' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          cambiarRolMiembro(cert.perfiles, 'voluntario')
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 py-2 text-xs font-black uppercase text-white hover:bg-neutral-800"
+                      >
+                        <UserCheck size={15} strokeWidth={2.5} /> Ascender a
+                        Voluntario
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div id="panel-solicitudes" className="space-y-4">
           {solicitudes.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm font-semibold text-neutral-500">
               No hay solicitudes de apoyo recibidas.
